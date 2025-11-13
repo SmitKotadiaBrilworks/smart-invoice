@@ -28,6 +28,7 @@ export type AlertType =
   | "low_cash_risk";
 export type AlertChannel = "email" | "in_app";
 export type AlertStatus = "pending" | "sent" | "failed";
+export type InvoiceType = "receivable" | "payable";
 
 export interface Database {
   public: {
@@ -269,6 +270,7 @@ export interface Database {
           created_by: string;
           created_at: string;
           updated_at: string;
+          invoice_type: InvoiceType;
         };
         Insert: {
           id?: string;
@@ -288,6 +290,7 @@ export interface Database {
           created_by: string;
           created_at?: string;
           updated_at?: string;
+          invoice_type: InvoiceType;
         };
         Update: {
           id?: string;
@@ -307,6 +310,7 @@ export interface Database {
           created_by?: string;
           created_at?: string;
           updated_at?: string;
+          invoice_type?: InvoiceType;
         };
         Relationships: [
           {
@@ -594,6 +598,7 @@ export interface Database {
       alert_type: AlertType;
       alert_channel: AlertChannel;
       alert_status: AlertStatus;
+      invoice_type: InvoiceType;
     };
     CompositeTypes: {
       [_ in never]: never;

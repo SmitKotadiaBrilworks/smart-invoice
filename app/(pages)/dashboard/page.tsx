@@ -20,6 +20,7 @@ import {
   Table,
   Tooltip,
   Carousel,
+  Tag,
 } from "antd";
 import {
   DollarOutlined,
@@ -510,36 +511,78 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {invoices.slice(0, 5).map((invoice) => (
-                    <div
-                      key={invoice.id}
-                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-bg cursor-pointer"
-                      onClick={() =>
-                        router.push(`/invoices/review/${invoice.id}`)
-                      }
-                    >
-                      <div className="flex-1">
-                        <div className="font-medium text-text-primary">
-                          {invoice.invoice_no}
+                  {invoices.slice(0, 5).map((invoice) => {
+                    const isReceivable = invoice.status === "draft";
+                    const isPayable = invoice.status === "approved";
+                    const invoiceType = isReceivable
+                      ? "receivable"
+                      : isPayable
+                      ? "payable"
+                      : "unknown";
+                    const amountColor = isReceivable
+                      ? "text-green-600"
+                      : isPayable
+                      ? "text-red-600"
+                      : "text-text-primary";
+
+                    return (
+                      <div
+                        key={invoice.id}
+                        className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-bg cursor-pointer"
+                        onClick={() =>
+                          router.push(`/invoices/review/${invoice.id}`)
+                        }
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium text-text-primary">
+                              {invoice.invoice_no}
+                            </div>
+                            <Tag
+                              className={
+                                invoiceType === "receivable"
+                                  ? "badge-paid"
+                                  : invoiceType === "payable"
+                                  ? "badge-overdue"
+                                  : "badge-draft"
+                              }
+                              style={{
+                                border: "none",
+                                padding: "2px 8px",
+                                borderRadius: "4px",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {invoiceType === "receivable"
+                                ? "Receivable"
+                                : invoiceType === "payable"
+                                ? "Payable"
+                                : "Unknown"}
+                            </Tag>
+                          </div>
+                          <div className="text-sm text-text-tertiary">
+                            {invoice.vendor?.name || "Unknown"} •{" "}
+                            {format(
+                              new Date(invoice.issue_date),
+                              "MMM dd, yyyy"
+                            )}
+                          </div>
                         </div>
-                        <div className="text-sm text-text-tertiary">
-                          {invoice.vendor?.name || "Unknown"} •{" "}
-                          {format(new Date(invoice.issue_date), "MMM dd, yyyy")}
+                        <div className="text-right">
+                          <div className={`font-semibold ${amountColor}`}>
+                            {isReceivable ? "+" : isPayable ? "-" : ""}
+                            {formatCurrency(
+                              invoice.total,
+                              invoice.currency ||
+                                selectedWorkspace?.currency ||
+                                "USD"
+                            )}
+                          </div>
+                          <ArrowRightOutlined className="text-text-tertiary ml-2" />
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-text-primary">
-                          {formatCurrency(
-                            invoice.total,
-                            invoice.currency ||
-                              selectedWorkspace?.currency ||
-                              "USD"
-                          )}
-                        </div>
-                        <ArrowRightOutlined className="text-text-tertiary ml-2" />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {invoices.length > 5 && (
                     <Button
                       type="link"

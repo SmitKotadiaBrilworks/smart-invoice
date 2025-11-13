@@ -26,14 +26,18 @@ import {
   Divider,
   Alert,
   Select,
+  Dropdown,
+  Modal,
 } from "antd";
 import { message } from "@/lib/toast";
 import {
   CheckCircleOutlined,
   ArrowLeftOutlined,
   SaveOutlined,
+  EditOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
-import ConfidenceBadge from "@/components/UI/ConfidenceBadge";
+import ConfidenceBadge from "@/components/ui/ConfidenceBadge";
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/constants/currencies";
 import type { Invoice, InvoiceLine } from "@/types";
 import { format } from "date-fns";
@@ -74,6 +78,7 @@ export default function InvoiceReviewPage() {
         issue_date: invoice.issue_date,
         due_date: invoice.due_date,
         currency: invoice.currency,
+        invoice_type: invoice.invoice_type || "payable",
         subtotal: invoice.subtotal,
         tax_total: invoice.tax_total,
         total: invoice.total,
@@ -118,6 +123,7 @@ export default function InvoiceReviewPage() {
           issue_date: values.issue_date,
           due_date: values.due_date,
           currency: values.currency,
+          invoice_type: values.invoice_type,
           subtotal: values.subtotal,
           tax_total: values.tax_total,
           total: values.total,
@@ -132,25 +138,107 @@ export default function InvoiceReviewPage() {
     }
   };
 
-  const handleApprove = async () => {
-    if (!selectedWorkspace || !invoiceId) return;
+  const handleStatusChange = async (newStatus: string) => {
+    if (!selectedWorkspace || !invoiceId || !invoice) return;
 
-    try {
-      await approveInvoice.mutateAsync({
-        invoiceId,
-        workspaceId: selectedWorkspace.id,
-      });
-
-      const confidence = invoice?.confidence || 0;
-      message.success(
-        `Invoice approved successfully (${(confidence * 100).toFixed(
-          0
-        )}% confidence)`
-      );
-      refetch();
-    } catch (error: any) {
-      message.error(error.message || "Failed to approve invoice");
+    const currentStatus = invoice.status;
+    if (currentStatus === newStatus) {
+      message.info("Invoice is already in this status");
+      return;
     }
+
+    // Get status display names
+    const statusNames: Record<string, string> = {
+      draft: "Draft",
+      approved: "Approved",
+      paid: "Paid",
+      partially_paid: "Partially Paid",
+      overdue: "Overdue",
+    };
+
+    const currentStatusName = statusNames[currentStatus] || currentStatus;
+    const newStatusName = statusNames[newStatus] || newStatus;
+
+    // Build confirmation message based on status change
+    let warningMessage = "";
+    if (currentStatus === "draft" && newStatus === "approved") {
+      warningMessage =
+        "Approving a vendor invoice marks it as a Payable (money going out). If this is a customer invoice (Receivable), you should keep it as Draft.";
+    } else if (currentStatus === "approved" && newStatus === "draft") {
+      warningMessage =
+        "Changing from Approved to Draft will mark this as a Receivable (money coming in). Make sure this is correct.";
+    } else if (newStatus === "paid" && currentStatus !== "paid") {
+      warningMessage =
+        "Marking as Paid indicates the invoice has been fully paid. Make sure a payment has been matched to this invoice.";
+    } else if (newStatus === "overdue") {
+      warningMessage =
+        "Marking as Overdue indicates this invoice is past its due date and not yet paid.";
+    }
+
+    // Show confirmation modal
+    Modal.confirm({
+      title: `Change Invoice Status`,
+      content: (
+        <div className="space-y-2">
+          <p>
+            Are you sure you want to change the invoice status from{" "}
+            <strong>{currentStatusName}</strong> to{" "}
+            <strong>{newStatusName}</strong>?
+          </p>
+          {warningMessage && (
+            <p className="text-text-tertiary text-sm">
+              <strong>Note:</strong> {warningMessage}
+            </p>
+          )}
+          <div className="mt-3 p-3 bg-bg rounded border border-border">
+            <div className="text-sm">
+              <div>
+                <strong>Invoice:</strong> {invoice.invoice_no}
+              </div>
+              <div>
+                <strong>Vendor:</strong> {invoice.vendor?.name || "Unknown"}
+              </div>
+              <div>
+                <strong>Amount:</strong>{" "}
+                {formatCurrency(invoice.total, invoice.currency || "USD")}
+              </div>
+              <div>
+                <strong>Current Status:</strong> <Tag>{currentStatusName}</Tag>
+              </div>
+              <div>
+                <strong>New Status:</strong> <Tag>{newStatusName}</Tag>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      okText: `Yes, Change to ${newStatusName}`,
+      okType: "primary",
+      cancelText: "Cancel",
+      width: 500,
+      onOk: async () => {
+        try {
+          await updateInvoice.mutateAsync({
+            invoiceId,
+            workspaceId: selectedWorkspace.id,
+            updates: {
+              status: newStatus as any,
+            },
+          });
+
+          message.success(
+            `Invoice status changed to ${newStatusName} successfully`
+          );
+          refetch();
+        } catch (error: any) {
+          message.error(error.message || "Failed to change invoice status");
+        }
+      },
+    });
+  };
+
+  const handleApprove = async () => {
+    handleStatusChange("approved");
   };
 
   if (authLoading || invoiceLoading) {
@@ -227,12 +315,77 @@ export default function InvoiceReviewPage() {
             <Text type="secondary" className="text-text-tertiary">
               Confidence
             </Text>
+            <div className="flex items-center gap-2">
+              <Text type="secondary" className="text-text-tertiary">
+                Status:
+              </Text>
+              <Tag
+                className={
+                  invoice.status === "draft"
+                    ? "badge-draft"
+                    : invoice.status === "approved"
+                    ? "badge-paid"
+                    : invoice.status === "paid"
+                    ? "badge-paid"
+                    : invoice.status === "partially_paid"
+                    ? "badge-pending"
+                    : "badge-overdue"
+                }
+                style={{
+                  border: "none",
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                }}
+              >
+                {invoice.status === "partially_paid"
+                  ? "Partially Paid"
+                  : invoice.status.charAt(0).toUpperCase() +
+                    invoice.status.slice(1)}
+              </Tag>
+            </div>
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: "draft",
+                    label: "Draft",
+                    disabled: invoice.status === "draft",
+                  },
+                  {
+                    key: "approved",
+                    label: "Approved",
+                    disabled: invoice.status === "approved",
+                  },
+                  {
+                    key: "paid",
+                    label: "Paid",
+                    disabled: invoice.status === "paid",
+                  },
+                  {
+                    key: "partially_paid",
+                    label: "Partially Paid",
+                    disabled: invoice.status === "partially_paid",
+                  },
+                  {
+                    key: "overdue",
+                    label: "Overdue",
+                    disabled: invoice.status === "overdue",
+                  },
+                ],
+                onClick: ({ key }) => handleStatusChange(key),
+              }}
+              trigger={["click"]}
+            >
+              <Button icon={<EditOutlined />}>
+                Change Status <DownOutlined />
+              </Button>
+            </Dropdown>
             {invoice.status === "draft" && (
               <Button
                 type="primary"
                 icon={<CheckCircleOutlined />}
                 onClick={handleApprove}
-                loading={approveInvoice.isPending}
+                loading={approveInvoice.isPending || updateInvoice.isPending}
               >
                 Approve & Save
               </Button>
@@ -404,6 +557,34 @@ export default function InvoiceReviewPage() {
                       />
                     </Form.Item>
                   </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label={
+                        <span className="text-text-primary">Invoice Type</span>
+                      }
+                      name="invoice_type"
+                      rules={[
+                        { required: true, message: "Invoice type is required" },
+                      ]}
+                      tooltip="Receivable: Money coming in (invoice you issue to customers). Payable: Money going out (invoice from vendor you need to pay)."
+                    >
+                      <Select
+                        options={[
+                          {
+                            label: "Receivable (Money Coming In)",
+                            value: "receivable",
+                          },
+                          {
+                            label: "Payable (Money Going Out)",
+                            value: "payable",
+                          },
+                        ]}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
                       label={

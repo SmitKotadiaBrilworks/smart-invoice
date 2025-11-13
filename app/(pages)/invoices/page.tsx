@@ -17,6 +17,7 @@ import {
   Empty,
   Select,
   Modal,
+  Dropdown,
 } from "antd";
 import { message } from "@/lib/toast";
 import {
@@ -26,6 +27,7 @@ import {
   CheckOutlined,
   ReloadOutlined,
   DeleteOutlined,
+  MoreOutlined,
 } from "@ant-design/icons";
 import type { Invoice } from "@/types";
 import { formatCurrency } from "@/lib/constants/currencies";
@@ -90,14 +92,69 @@ export default function InvoicesPage() {
       ),
     },
     {
+      title: "Type",
+      key: "invoice_type",
+      render: (_: any, record: Invoice) => {
+        // Current logic: draft = receivable, approved = payable
+        const isReceivable = record.status === "draft";
+        const isPayable = record.status === "approved";
+
+        // If paid or partially paid, check original type based on status history
+        // For now, we'll use the current status logic
+        let invoiceType: "receivable" | "payable" | "unknown";
+        if (isReceivable) {
+          invoiceType = "receivable";
+        } else if (
+          isPayable ||
+          record.status === "paid" ||
+          record.status === "partially_paid"
+        ) {
+          invoiceType = "payable";
+        } else {
+          invoiceType = "unknown";
+        }
+
+        return (
+          <Tag
+            className={
+              invoiceType === "receivable"
+                ? "badge-paid" // Green for money coming in
+                : invoiceType === "payable"
+                ? "badge-overdue" // Red for money going out
+                : "badge-draft"
+            }
+            style={{ border: "none", padding: "4px 12px", borderRadius: "6px" }}
+          >
+            {invoiceType === "receivable"
+              ? "Receivable"
+              : invoiceType === "payable"
+              ? "Payable"
+              : "Unknown"}
+          </Tag>
+        );
+      },
+    },
+    {
       title: "Amount",
       dataIndex: "total",
       key: "total",
-      render: (amount: number, record: Invoice) => (
-        <span className="text-text-primary font-semibold">
-          {formatCurrency(amount, record.currency || "USD")}
-        </span>
-      ),
+      render: (amount: number, record: Invoice) => {
+        // Color code amounts: green for receivables, red for payables
+        const isReceivable = record.status === "draft";
+        const isPayable = record.status === "approved";
+        const colorClass = isReceivable
+          ? "text-green-600"
+          : isPayable
+          ? "text-red-600"
+          : "text-text-primary";
+
+        return (
+          <span className={`font-semibold ${colorClass}`}>
+            {isReceivable ? "+" : isPayable ? "-" : ""}
+            {formatCurrency(amount, record.currency || "USD")}
+          </span>
+        );
+      },
     },
     {
       title: "Confidence",
@@ -158,67 +215,85 @@ export default function InvoicesPage() {
     {
       title: "Actions",
       key: "actions",
-      render: (_: any, record: Invoice) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => router.push(`/invoices/review/${record.id}`)}
-            className="text-primary"
+      render: (_: any, record: Invoice) => {
+        const handleView = () => {
+          router.push(`/invoices/review/${record.id}`);
+        };
+
+        const handleReparse = () => {
+          Modal.confirm({
+            title: "Re-parse Invoice",
+            content: `Are you sure you want to re-parse invoice ${record.invoice_no}? This will require uploading the file again.`,
+            okText: "Re-parse",
+            cancelText: "Cancel",
+            onOk: () => {
+              message.info(
+                "Please use the Upload Invoice feature to re-parse. Select the same file to update the invoice."
+              );
+            },
+          });
+        };
+
+        const handleDelete = () => {
+          Modal.confirm({
+            title: "Delete Invoice",
+            content: `Are you sure you want to delete invoice ${record.invoice_no}? This action cannot be undone.`,
+            okText: "Delete",
+            okType: "danger",
+            cancelText: "Cancel",
+            onOk: async () => {
+              try {
+                await deleteInvoice.mutateAsync({
+                  invoiceId: record.id,
+                  workspaceId: selectedWorkspace?.id || "",
+                });
+                message.success("Invoice deleted successfully");
+                refetch();
+              } catch (error: any) {
+                message.error(error.message || "Failed to delete invoice");
+              }
+            },
+          });
+        };
+
+        const items = [
+          {
+            key: "view",
+            label: "View",
+            icon: <EyeOutlined />,
+            onClick: handleView,
+          },
+          {
+            key: "reparse",
+            label: "Re-parse",
+            icon: <ReloadOutlined />,
+            onClick: handleReparse,
+          },
+          { type: "divider" as const },
+          {
+            key: "delete",
+            label: "Delete",
+            icon: <DeleteOutlined />,
+            danger: true,
+            onClick: handleDelete,
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{ items }}
+            trigger={["click"]}
+            placement="bottomRight"
           >
-            View
-          </Button>
-          <Button
-            type="link"
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              Modal.confirm({
-                title: "Re-parse Invoice",
-                content: `Are you sure you want to re-parse invoice ${record.invoice_no}? This will require uploading the file again.`,
-                okText: "Re-parse",
-                cancelText: "Cancel",
-                onOk: () => {
-                  message.info(
-                    "Please use the Upload Invoice feature to re-parse. Select the same file to update the invoice."
-                  );
-                },
-              });
-            }}
-            className="text-text-tertiary"
-          >
-            Re-parse
-          </Button>
-          <Button
-            type="link"
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              Modal.confirm({
-                title: "Delete Invoice",
-                content: `Are you sure you want to delete invoice ${record.invoice_no}? This action cannot be undone.`,
-                okText: "Delete",
-                okType: "danger",
-                cancelText: "Cancel",
-                onOk: async () => {
-                  try {
-                    await deleteInvoice.mutateAsync({
-                      invoiceId: record.id,
-                      workspaceId: selectedWorkspace?.id || "",
-                    });
-                    message.success("Invoice deleted successfully");
-                    refetch();
-                  } catch (error: any) {
-                    message.error(error.message || "Failed to delete invoice");
-                  }
-                },
-              });
-            }}
-            danger
-            loading={deleteInvoice.isPending}
-          >
-            Delete
-          </Button>
-        </Space>
-      ),
+            <Button
+              type="text"
+              icon={<MoreOutlined className="rotate-90" />}
+              onClick={(e) => e.stopPropagation()}
+              loading={deleteInvoice.isPending}
+            />
+          </Dropdown>
+        );
+      },
     },
   ];
 
@@ -243,6 +318,25 @@ export default function InvoicesPage() {
                   { label: "Paid", value: "paid" },
                   { label: "Partially Paid", value: "partially_paid" },
                   { label: "Overdue", value: "overdue" },
+                ]}
+              />
+              <Select
+                placeholder="Filter by type"
+                allowClear
+                style={{ width: 150 }}
+                onChange={(value) => {
+                  // Filter by invoice type based on status
+                  if (value === "receivable") {
+                    setStatusFilter("draft");
+                  } else if (value === "payable") {
+                    setStatusFilter("approved");
+                  } else {
+                    setStatusFilter(undefined);
+                  }
+                }}
+                options={[
+                  { label: "Receivable (Cash In)", value: "receivable" },
+                  { label: "Payable (Cash Out)", value: "payable" },
                 ]}
               />
               <Button

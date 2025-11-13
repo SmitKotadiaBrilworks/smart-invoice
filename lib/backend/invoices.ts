@@ -78,7 +78,8 @@ export const invoiceBackend = {
     vendorId: string,
     userId: string,
     source: "upload" | "email" = "upload",
-    confidence: number = 0.8
+    confidence: number = 0.8,
+    invoiceType: "receivable" | "payable" = "payable"
   ) => {
     // Insert invoice
     const { data: invoice, error: invoiceError } = await supabaseAdmin
@@ -94,6 +95,7 @@ export const invoiceBackend = {
         tax_total: extraction.tax_total,
         total: extraction.total,
         status: "draft",
+        invoice_type: invoiceType,
         confidence,
         source,
         created_by: userId,

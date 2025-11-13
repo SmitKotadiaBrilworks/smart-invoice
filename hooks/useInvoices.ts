@@ -101,6 +101,10 @@ export const useUpdateInvoice = () => {
       queryClient.invalidateQueries({
         queryKey: ["invoices", variables.workspaceId],
       });
+      // Invalidate dashboard queries to update KPIs when invoice is updated
+      queryClient.invalidateQueries({
+        queryKey: ["dashboard", variables.workspaceId],
+      });
     },
   });
 };
@@ -124,6 +128,10 @@ export const useApproveInvoice = () => {
       });
       queryClient.invalidateQueries({
         queryKey: ["invoices", variables.workspaceId],
+      });
+      // Invalidate dashboard queries to update KPIs when invoice is approved
+      queryClient.invalidateQueries({
+        queryKey: ["dashboard", variables.workspaceId],
       });
     },
   });

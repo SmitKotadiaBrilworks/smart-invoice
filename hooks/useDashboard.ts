@@ -29,48 +29,77 @@ export const useDashboardKPIs = (workspaceId: string) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Calculate Cash In (Expected) - Receivables: Draft invoices not yet matched to payments
+    // Calculate Cash In (Expected) - Receivables: Invoices not yet matched to payments
     // These are invoices we've issued to customers and expect to receive payment for
-    // Note: Using draft status to distinguish from payables (approved invoices)
+    // Use invoice_type if available, otherwise fall back to status-based logic
     const cashInExpected = invoices
-      .filter(
-        (inv) => inv.status === "draft" && !inv.matches?.some((m) => m.payment)
-      )
+      .filter((inv) => {
+        // Check if invoice_type exists, otherwise use status-based fallback
+        const isReceivable =
+          inv.invoice_type === "receivable" ||
+          (!inv.invoice_type && inv.status === "draft");
+        return (
+          isReceivable &&
+          !inv.matches?.some((m) => m.payment) &&
+          inv.status !== "paid"
+        );
+      })
       .reduce((sum, inv) => sum + (inv.total || 0), 0);
 
-    // Calculate Cash Out (Expected) - Payables: Approved vendor invoices not yet paid
-    // These are invoices from vendors that we need to pay (only approved status, excludes paid/partially_paid)
-    // Note: This is mutually exclusive from Cash In to avoid double-counting
+    // Calculate Cash Out (Expected) - Payables: Invoices not yet paid
+    // These are invoices from vendors that we need to pay
+    // Use invoice_type if available, otherwise fall back to status-based logic
     const cashOutExpected = invoices
-      .filter(
-        (inv) =>
-          inv.status === "approved" && !inv.matches?.some((m) => m.payment)
-      )
+      .filter((inv) => {
+        // Check if invoice_type exists, otherwise use status-based fallback
+        const isPayable =
+          inv.invoice_type === "payable" ||
+          (!inv.invoice_type && inv.status === "approved");
+        return (
+          isPayable &&
+          !inv.matches?.some((m) => m.payment) &&
+          inv.status !== "paid"
+        );
+      })
       .reduce((sum, inv) => sum + (inv.total || 0), 0);
 
-    // Calculate Amount Received - Payments matched to draft invoices (receivables)
+    // Calculate Amount Received - Payments matched to receivable invoices
     // This represents money received from customers for receivables
+    // Use invoice_type if available, otherwise fall back to status-based logic
     const amountReceived =
       payments
         ?.filter((payment) => {
           if (!payment.matches || payment.matches.length === 0) return false;
-          // Check if any matched invoice is a draft (receivable)
-          return payment.matches.some(
-            (match) => match.invoice?.status === "draft"
-          );
+          // Check if any matched invoice is a receivable
+          return payment.matches.some((match) => {
+            const invoice = match.invoice;
+            if (!invoice) return false;
+            // Use invoice_type if available, otherwise check status
+            return (
+              invoice.invoice_type === "receivable" ||
+              (!invoice.invoice_type && invoice.status === "draft")
+            );
+          });
         })
         .reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
 
-    // Calculate Amount Paid - Payments matched to approved invoices (payables)
+    // Calculate Amount Paid - Payments matched to payable invoices
     // This represents money paid to vendors for payables
+    // Use invoice_type if available, otherwise fall back to status-based logic
     const amountPaid =
       payments
         ?.filter((payment) => {
           if (!payment.matches || payment.matches.length === 0) return false;
-          // Check if any matched invoice is approved (payable)
-          return payment.matches.some(
-            (match) => match.invoice?.status === "approved"
-          );
+          // Check if any matched invoice is a payable
+          return payment.matches.some((match) => {
+            const invoice = match.invoice;
+            if (!invoice) return false;
+            // Use invoice_type if available, otherwise check status
+            return (
+              invoice.invoice_type === "payable" ||
+              (!invoice.invoice_type && invoice.status === "approved")
+            );
+          });
         })
         .reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
 

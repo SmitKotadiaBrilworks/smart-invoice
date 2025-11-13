@@ -312,6 +312,7 @@ export function AppSidebar({
           bodyStyle={{ padding: 0 }}
           width={250}
           closable={false}
+          className="!bg-primary"
         >
           {menuContent}
         </Drawer>

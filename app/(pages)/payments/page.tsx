@@ -7,12 +7,17 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import {
   usePayments,
   useUnmatchedPayments,
+  useMatchedPayments,
   useCreatePayment,
   usePaymentSuggestions,
   useCreatePaymentMatch,
+  useUpdatePaymentMatch,
+  useDeletePaymentMatch,
+  useDeletePayment,
 } from "@/hooks/usePayments";
 import PaymentModal from "@/components/payments/PaymentModal";
 import PaymentMatchModal from "@/components/payments/PaymentMatchModal";
+import PaymentDetailModal from "@/components/payments/PaymentDetailModal";
 
 import {
   Table,
@@ -25,8 +30,18 @@ import {
   Empty,
   Tabs,
   message,
+  Modal,
+  Dropdown,
 } from "antd";
-import { PlusOutlined, DollarOutlined, LinkOutlined } from "@ant-design/icons";
+import type { MenuProps } from "antd";
+import {
+  PlusOutlined,
+  DollarOutlined,
+  LinkOutlined,
+  DeleteOutlined,
+  EyeOutlined,
+  MoreOutlined,
+} from "@ant-design/icons";
 import { formatCurrency } from "@/lib/constants/currencies";
 import type { Payment } from "@/types";
 import { format } from "date-fns";
@@ -39,6 +54,7 @@ export default function PaymentsPage() {
   const { selectedWorkspace } = useWorkspaceContext();
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [matchingPayment, setMatchingPayment] = useState<Payment | null>(null);
+  const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
 
   const { data: payments, isLoading: paymentsLoading } = usePayments(
     selectedWorkspace?.id || "",
@@ -46,8 +62,11 @@ export default function PaymentsPage() {
   );
   const { data: unmatchedPayments, isLoading: unmatchedLoading } =
     useUnmatchedPayments(selectedWorkspace?.id || "");
+  const { data: matchedPayments, isLoading: matchedLoading } =
+    useMatchedPayments(selectedWorkspace?.id || "");
 
   const createPaymentMatch = useCreatePaymentMatch();
+  const deletePayment = useDeletePayment();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -96,6 +115,21 @@ export default function PaymentsPage() {
         formatCurrency(net, record.currency || "USD"),
     },
     {
+      title: "Match Status",
+      key: "match_status",
+      render: (_: any, record: Payment) => {
+        const isMatched = record.matches && record.matches.length > 0;
+        return (
+          <Tag
+            className={isMatched ? "badge-paid" : "badge-pending"}
+            style={{ border: "none", padding: "4px 12px", borderRadius: "6px" }}
+          >
+            {isMatched ? "Matched" : "Unmatched"}
+          </Tag>
+        );
+      },
+    },
+    {
       title: "Source",
       dataIndex: "source",
       key: "source",
@@ -130,18 +164,98 @@ export default function PaymentsPage() {
     {
       title: "Actions",
       key: "actions",
-      render: (_: any, record: Payment) => (
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          onClick={() => {
-            setMatchingPayment(record);
-          }}
-          className="text-primary"
-        >
-          Match
-        </Button>
-      ),
+      render: (_: any, record: Payment) => {
+        const isMatched = record.matches && record.matches.length > 0;
+
+        const handleDelete = () => {
+          Modal.confirm({
+            title: "Delete Payment",
+            content: (
+              <div>
+                <p>Are you sure you want to delete this payment?</p>
+                <div className="mt-2 space-y-1 text-sm text-text-tertiary">
+                  <p>
+                    <strong>Amount:</strong>{" "}
+                    {formatCurrency(record.amount, record.currency || "USD")}
+                  </p>
+                  <p>
+                    <strong>Customer:</strong> {record.customer || "N/A"}
+                  </p>
+                  <p>
+                    <strong>Date:</strong>{" "}
+                    {format(new Date(record.received_at), "MMM dd, yyyy")}
+                  </p>
+                  {isMatched && (
+                    <p className="text-warning mt-2">
+                      <strong>Warning:</strong> This payment is matched to{" "}
+                      {record.matches?.length || 0} invoice(s). Deleting it will
+                      also remove the match(es) and update the invoice
+                      status(es).
+                    </p>
+                  )}
+                </div>
+              </div>
+            ),
+            okText: "Delete",
+            okType: "danger",
+            cancelText: "Cancel",
+            onOk: async () => {
+              try {
+                await deletePayment.mutateAsync({
+                  payment_id: record.id,
+                  workspace_id: selectedWorkspace?.id || "",
+                });
+                message.success("Payment deleted successfully");
+              } catch (error: any) {
+                message.error(error.message || "Failed to delete payment");
+              }
+            },
+          });
+        };
+
+        const menuItems: MenuProps["items"] = [
+          {
+            key: "view",
+            label: "View Details",
+            icon: <EyeOutlined />,
+            onClick: () => {
+              setViewingPayment(record);
+            },
+          },
+          {
+            key: "match",
+            label: isMatched ? "View/Edit Match" : "Match Payment",
+            icon: <LinkOutlined />,
+            onClick: () => {
+              setMatchingPayment(record);
+            },
+          },
+          {
+            type: "divider",
+          },
+          {
+            key: "delete",
+            label: "Delete",
+            icon: <DeleteOutlined />,
+            danger: true,
+            onClick: handleDelete,
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{ items: menuItems }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
+            <Button
+              type="text"
+              icon={<MoreOutlined className="rotate-90" />}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        );
+      },
     },
   ];
 
@@ -161,6 +275,26 @@ export default function PaymentsPage() {
               showTotal: (total) => `Total ${total} payments`,
             }}
             loading={paymentsLoading}
+            scroll={{ x: "max-content" }}
+          />
+        </div>
+      ),
+    },
+    {
+      key: "matched",
+      label: "Matched",
+      children: (
+        <div className="overflow-x-auto">
+          <Table
+            columns={paymentColumns}
+            dataSource={matchedPayments}
+            rowKey="id"
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total) => `Total ${total} matched payments`,
+            }}
+            loading={matchedLoading}
             scroll={{ x: "max-content" }}
           />
         </div>
@@ -242,6 +376,11 @@ export default function PaymentsPage() {
               onSuccess={() => {
                 setMatchingPayment(null);
               }}
+            />
+            <PaymentDetailModal
+              open={!!viewingPayment}
+              onCancel={() => setViewingPayment(null)}
+              payment={viewingPayment}
             />
           </>
         )}

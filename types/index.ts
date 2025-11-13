@@ -49,6 +49,7 @@ export interface Invoice {
   tax_total: number;
   total: number;
   status: "draft" | "approved" | "paid" | "partially_paid" | "overdue";
+  invoice_type?: "receivable" | "payable";
   confidence: number;
   source: "upload" | "email";
   duplicate_of?: string;
