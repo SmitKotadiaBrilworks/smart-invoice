@@ -128,9 +128,19 @@ export class TokenManager {
 
   // Clear all tokens from a NextResponse
   static clearTokens(response: NextResponse) {
-    response.cookies.delete(AUTH_TOKEN_KEY);
-    response.cookies.delete(REFRESH_TOKEN_KEY);
-    response.cookies.delete(USER_ID_KEY);
+    // Delete cookies by setting them with expired date
+    response.cookies.set(AUTH_TOKEN_KEY, "", {
+      expires: new Date(0),
+      path: "/",
+    });
+    response.cookies.set(REFRESH_TOKEN_KEY, "", {
+      expires: new Date(0),
+      path: "/",
+    });
+    response.cookies.set(USER_ID_KEY, "", {
+      expires: new Date(0),
+      path: "/",
+    });
   }
 
   static getUserIdFromToken(token: string): string | null {

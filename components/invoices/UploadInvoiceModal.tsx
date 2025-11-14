@@ -149,7 +149,27 @@ export default function UploadInvoiceModal({
       onSuccess?.();
       handleCancel();
     } catch (error: any) {
-      message.error(error.message || "Failed to save invoice");
+      // Handle duplicate invoice error specifically
+      if (
+        error.response?.status === 409 ||
+        error.response?.data?.code === "DUPLICATE_INVOICE"
+      ) {
+        const errorMessage =
+          error.response?.data?.error ||
+          error.message ||
+          "Invoice already exists";
+        message.error(errorMessage);
+        // Optionally, you could navigate to the existing invoice here
+        if (error.response?.data?.existingInvoice?.id) {
+          // Could add a link to view the existing invoice
+          console.log(
+            "Existing invoice ID:",
+            error.response.data.existingInvoice.id
+          );
+        }
+      } else {
+        message.error(error.message || "Failed to save invoice");
+      }
     } finally {
       setSaving(false);
     }

@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { clientTokenManager } from "@/lib/supabase/client";
 
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -34,6 +35,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
         const response = await fetch("/api/auth/refresh", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
         });
 
         const data = await response.json();
@@ -42,13 +44,37 @@ const refreshAccessToken = async (): Promise<string | null> => {
           // Clear session on error
           const { supabase } = await import("@/lib/supabase/client");
           await supabase.auth.signOut();
+          if (typeof window !== "undefined") {
+            clientTokenManager.clearTokens();
+          }
           throw new Error(data.error || "Failed to refresh token");
         }
 
         if (data.session) {
-          // Update Supabase client session
+          // Update Supabase client session (non-blocking)
           const { supabase } = await import("@/lib/supabase/client");
-          await supabase.auth.setSession(data.session);
+          supabase.auth
+            .setSession({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            })
+            .catch((err) => {
+              console.error(
+                "Error setting refreshed session in API client:",
+                err
+              );
+            });
+
+          // Also update cookies via clientTokenManager
+          if (typeof window !== "undefined") {
+            clientTokenManager.setTokens({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+              expires_at: data.session.expires_at,
+              user_id: data.session.user?.id ?? undefined,
+            });
+          }
+
           return data.session.access_token;
         }
 
@@ -56,6 +82,9 @@ const refreshAccessToken = async (): Promise<string | null> => {
       } catch (error) {
         const { supabase } = await import("@/lib/supabase/client");
         await supabase.auth.signOut();
+        if (typeof window !== "undefined") {
+          clientTokenManager.clearTokens();
+        }
         throw error;
       }
     })();
@@ -70,13 +99,40 @@ const refreshAccessToken = async (): Promise<string | null> => {
 
 // Ensure we always attach a fresh access token
 apiClient.interceptors.request.use(async (config) => {
-  const { supabase } = await import("@/lib/supabase/client");
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  let accessToken: string | null = null;
+  let expiresAt: number | null = null;
 
-  let accessToken = session?.access_token ?? null;
-  const expiresAt = session?.expires_at ? session.expires_at * 1000 : null;
+  // First, try to get token from Supabase client session
+  try {
+    const { supabase } = await import("@/lib/supabase/client");
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    accessToken = session?.access_token ?? null;
+    expiresAt = session?.expires_at ? session.expires_at * 1000 : null;
+  } catch (err) {
+    console.warn("Error getting session from Supabase client:", err);
+  }
+
+  // Fallback: try to get token from cookies if Supabase session is not available
+  if (!accessToken && typeof window !== "undefined") {
+    try {
+      const cookieToken = clientTokenManager.getAccessToken();
+      if (cookieToken && !clientTokenManager.isTokenExpired()) {
+        accessToken = cookieToken;
+        // Try to decode expiry from token
+        try {
+          const payload = JSON.parse(atob(cookieToken.split(".")[1]));
+          expiresAt = payload.exp ? payload.exp * 1000 : null;
+        } catch {
+          // If we can't decode, assume it's valid for now
+        }
+      }
+    } catch (err) {
+      console.warn("Error getting token from cookies:", err);
+    }
+  }
 
   // If token expires in the next 60 seconds, refresh proactively
   if (expiresAt && expiresAt - Date.now() <= 60_000) {

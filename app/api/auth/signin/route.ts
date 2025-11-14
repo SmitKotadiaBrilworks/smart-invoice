@@ -6,6 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
 
+    // Get redirect URL from query params (set by middleware)
+    const { searchParams } = new URL(request.url);
+    const redirectTo = searchParams.get("redirect") || "/dashboard";
+
     const supabase = createServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -27,6 +31,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       user: data.user,
       session: data.session,
+      redirectTo, // Include redirect URL in response
     });
 
     // Set tokens in cookies

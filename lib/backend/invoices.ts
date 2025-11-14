@@ -87,6 +87,30 @@ export const invoiceBackend = {
     tempFilePath?: string | null,
     mimeType?: string
   ) => {
+    // Check if invoice with same workspace_id, vendor_id, and invoice_no already exists
+    const { data: existingInvoice, error: checkError } = await supabaseAdmin
+      .from("invoices")
+      .select("id, invoice_no, status")
+      .eq("workspace_id", workspaceId)
+      .eq("vendor_id", vendorId)
+      .eq("invoice_no", extraction.invoice_number)
+      .maybeSingle();
+
+    if (checkError && checkError.code !== "PGRST116") {
+      // PGRST116 is "not found" which is fine, other errors should be thrown
+      throw checkError;
+    }
+
+    if (existingInvoice) {
+      // Invoice already exists - return existing invoice with a clear error message
+      const error = new Error(
+        `Invoice number "${extraction.invoice_number}" already exists for this vendor in this workspace.`
+      ) as any;
+      error.code = "DUPLICATE_INVOICE";
+      error.existingInvoice = existingInvoice;
+      throw error;
+    }
+
     // Insert invoice
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from("invoices")
@@ -109,7 +133,21 @@ export const invoiceBackend = {
       .select()
       .single();
 
-    if (invoiceError) throw invoiceError;
+    if (invoiceError) {
+      // Check if it's a duplicate key error
+      if (
+        invoiceError.code === "23505" ||
+        invoiceError.message?.includes("duplicate key") ||
+        invoiceError.message?.includes("unique constraint")
+      ) {
+        const error = new Error(
+          `Invoice number "${extraction.invoice_number}" already exists for this vendor in this workspace.`
+        ) as any;
+        error.code = "DUPLICATE_INVOICE";
+        throw error;
+      }
+      throw invoiceError;
+    }
 
     // Move file from temp location to final location if it was uploaded
     if (tempFilePath && source === "upload") {

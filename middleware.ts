@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest) {
 
   // Only read cookies (never set/clear in middleware)
   const accessToken = request.cookies.get("sb-auth-token")?.value;
-  
+
   // Check if token is expired by decoding it
   let isAuthenticated = false;
   if (accessToken) {
@@ -86,16 +86,6 @@ export async function middleware(request: NextRequest) {
   // Handle protected routes
   if (isProtectedRoute(pathname)) {
     if (!isAuthenticated) {
-      // Check if token is expired but refresh token exists
-      const refreshToken = request.cookies.get("sb-refresh-token")?.value;
-      if (refreshToken && accessToken) {
-        // Token might be expired, try to refresh in the background
-        // For now, redirect to sign-in and let the API handle refresh
-        const signInUrl = new URL("/auth/signin", request.url);
-        signInUrl.searchParams.set("redirect", pathname);
-        return NextResponse.redirect(signInUrl);
-      }
-
       // No valid token, redirect to sign-in
       const signInUrl = new URL("/auth/signin", request.url);
       signInUrl.searchParams.set("redirect", pathname);
@@ -120,4 +110,3 @@ export const config = {
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|public).*)",
   ],
 };
-

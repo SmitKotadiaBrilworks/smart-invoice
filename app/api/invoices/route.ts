@@ -99,6 +99,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ invoice });
   } catch (error: any) {
+    // Handle duplicate invoice error with appropriate status code
+    if (error.code === "DUPLICATE_INVOICE") {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+          existingInvoice: error.existingInvoice,
+        },
+        { status: 409 } // 409 Conflict
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

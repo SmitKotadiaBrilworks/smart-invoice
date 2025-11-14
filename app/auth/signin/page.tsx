@@ -20,13 +20,10 @@ export default function SignInPage() {
     setLoading(true);
     try {
       await signIn(values.email, values.password);
-      message.success("Signed in successfully");
-      // Redirect to the original page or dashboard
-      const redirect = searchParams.get("redirect") || "/dashboard";
-      router.push(redirect);
+      // Don't show success message here - navigation happens immediately via window.location.replace
+      // Navigation is handled by AuthContext onSuccess callback
     } catch (error: any) {
       message.error(error.message || "Failed to sign in");
-    } finally {
       setLoading(false);
     }
   };

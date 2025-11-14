@@ -44,8 +44,11 @@ function HeaderComponent() {
       icon: <LogoutOutlined />,
       label: "Logout",
       onClick: async () => {
-        await signOut();
-        router.push("/");
+        try {
+          await signOut();
+        } catch (error) {
+          console.error("Sign out error:", error);
+        }
       },
       danger: true,
     },

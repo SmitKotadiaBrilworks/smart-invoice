@@ -165,7 +165,19 @@ export default function ManualInvoicePage() {
       message.success("Invoice created successfully");
       router.push("/invoices");
     } catch (error: any) {
-      message.error(error.message || "Failed to create invoice");
+      // Handle duplicate invoice error specifically
+      if (
+        error.response?.status === 409 ||
+        error.response?.data?.code === "DUPLICATE_INVOICE"
+      ) {
+        const errorMessage =
+          error.response?.data?.error ||
+          error.message ||
+          "Invoice already exists";
+        message.error(errorMessage);
+      } else {
+        message.error(error.message || "Failed to create invoice");
+      }
     }
   };
 

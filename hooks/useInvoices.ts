@@ -54,6 +54,8 @@ export const useCreateInvoice = () => {
       vendor_id: string;
       source?: "upload" | "email";
       confidence?: number;
+      file_path?: string | null;
+      mime_type?: string;
     }) => {
       const { data } = await apiClient.post("/invoices", payload);
       return data.invoice as Invoice;
@@ -66,6 +68,8 @@ export const useCreateInvoice = () => {
         vendor_id: string;
         source?: "upload" | "email";
         confidence?: number;
+        file_path?: string | null;
+        mime_type?: string;
       }
     ) => {
       queryClient.invalidateQueries({
