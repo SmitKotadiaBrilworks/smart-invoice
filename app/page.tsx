@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Button, Card, Typography, Spin } from "antd";
@@ -13,14 +12,9 @@ import {
 const { Title, Paragraph } = Typography;
 
 export default function Home() {
+  // No need for redirect logic - middleware handles it
   const router = useRouter();
-  const { user, isLoading, isAuthenticated } = useAuthContext();
-
-  useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      router.push("/dashboard");
-    }
-  }, [isAuthenticated, isLoading, router]);
+  const { isLoading } = useAuthContext();
 
   if (isLoading) {
     return (

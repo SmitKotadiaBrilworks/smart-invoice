@@ -6,6 +6,7 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useVendors } from "@/hooks/useVendors";
 import VendorModal from "@/components/vendors/VendorModal";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Table,
@@ -33,20 +34,10 @@ export default function VendorsPage() {
     selectedWorkspace?.id || ""
   );
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   if (authLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {

@@ -113,7 +113,7 @@ export default function PagesLayout({
 
   return (
     <SidebarProvider>
-      <Layout className="h-screen flex bg-blue-500">
+      <Layout className="h-screen flex w-screen">
         <AppSidebar
           filteredItems={filteredItems}
           filteredFooterItems={filteredFooterItems}

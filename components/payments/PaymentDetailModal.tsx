@@ -1,7 +1,16 @@
 "use client";
 
-import { Modal, Card, Typography, Tag, Descriptions, Divider } from "antd";
-import { DollarOutlined } from "@ant-design/icons";
+import { useRouter } from "next/navigation";
+import {
+  Modal,
+  Card,
+  Typography,
+  Tag,
+  Descriptions,
+  Divider,
+  Button,
+} from "antd";
+import { DollarOutlined, FileTextOutlined } from "@ant-design/icons";
 import { formatCurrency } from "@/lib/constants/currencies";
 import type { Payment } from "@/types";
 import { format } from "date-fns";
@@ -19,6 +28,8 @@ export default function PaymentDetailModal({
   onCancel,
   payment,
 }: PaymentDetailModalProps) {
+  const router = useRouter();
+
   if (!payment) return null;
 
   const isMatched = payment.matches && payment.matches.length > 0;
@@ -139,12 +150,30 @@ export default function PaymentDetailModal({
               {payment.matches.map((match) => (
                 <Card key={match.id} size="small" className="bg-bg">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <Text strong>
-                        Invoice #{match.invoice?.invoice_no || "N/A"}
-                      </Text>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Text strong className="text-text-primary">
+                          Invoice #{match.invoice?.invoice_no || "N/A"}
+                        </Text>
+                        {match.invoice?.id && (
+                          <Button
+                            type="link"
+                            icon={<FileTextOutlined />}
+                            size="small"
+                            onClick={() => {
+                              router.push(
+                                `/invoices/review/${match.invoice?.id}`
+                              );
+                              onCancel();
+                            }}
+                            className="p-0 h-auto text-primary"
+                          >
+                            View Invoice
+                          </Button>
+                        )}
+                      </div>
                       <div className="text-sm text-text-tertiary mt-1">
-                        {match.invoice?.vendor?.name || "Unknown Vendor"}
+                        {match.invoice?.vendor?.name || "N/A"}
                       </div>
                     </div>
                     <div className="text-right">

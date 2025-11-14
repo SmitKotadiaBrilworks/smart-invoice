@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const {
     data: user,
     isLoading: userLoading,
+    error: userError,
     refetch: refetchUser,
   } = useQuery({
     queryKey: ["auth", "user"],
@@ -40,16 +41,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: { user },
         error,
       } = await supabase.auth.getUser();
-      if (error) throw error;
+      if (error) {
+        // If token is expired or invalid, clear session
+        if (
+          error.message?.includes("expired") ||
+          error.message?.includes("invalid") ||
+          error.message?.includes("JWT")
+        ) {
+          try {
+            await supabase.auth.signOut();
+          } catch (signOutErr) {
+            // Ignore sign out errors
+          }
+        }
+        // Return null instead of throwing to prevent infinite loading
+        return null;
+      }
       return user;
     },
     retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   // Get session
   const {
     data: sessionData,
     isLoading: sessionLoading,
+    error: sessionError,
     refetch: refetchSession,
   } = useQuery({
     queryKey: ["auth", "session"],
@@ -58,10 +77,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: { session },
         error,
       } = await supabase.auth.getSession();
-      if (error) throw error;
+
+      if (error) {
+        // If token is expired or invalid, try to refresh via API
+        if (
+          error.message?.includes("expired") ||
+          error.message?.includes("invalid") ||
+          error.message?.includes("JWT")
+        ) {
+          // Try to refresh using API (which updates cookies)
+          try {
+            const refreshResponse = await fetch("/api/auth/refresh", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            });
+
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              if (refreshData.session) {
+                await supabase.auth.setSession(refreshData.session);
+                return refreshData.session;
+              }
+            }
+          } catch (refreshErr) {
+            // Refresh failed, sign out
+            try {
+              await supabase.auth.signOut();
+            } catch (signOutErr) {
+              // Ignore sign out errors
+            }
+          }
+        }
+        // Return null if refresh failed or no refresh needed
+        return null;
+      }
+
+      // Check if session exists and is not expired
+      if (session?.expires_at) {
+        const expiresAt = session.expires_at * 1000; // Convert to milliseconds
+        const now = Date.now();
+        // If expired, try to refresh
+        if (expiresAt <= now) {
+          try {
+            const refreshResponse = await fetch("/api/auth/refresh", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            });
+
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              if (refreshData.session) {
+                await supabase.auth.setSession(refreshData.session);
+                return refreshData.session;
+              }
+            }
+          } catch (refreshErr) {
+            // Refresh failed, return null
+            return null;
+          }
+        }
+      }
+
       return session;
     },
     retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   useEffect(() => {
@@ -96,31 +177,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     try {
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
+      // Use API route to refresh and update cookies
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
-      if (!currentSession) {
-        throw new Error("No session to refresh");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to refresh session");
       }
 
-      const {
-        data: { session: newSession },
-        error,
-      } = await supabase.auth.refreshSession(currentSession);
-
-      if (error) throw error;
-
-      if (newSession) {
-        setSession(newSession);
+      if (data.session) {
+        // Update Supabase client session for client-side state
+        await supabase.auth.setSession(data.session);
+        setSession(data.session);
         await refetchUser();
         await refetchSession();
         queryClient.invalidateQueries({ queryKey: ["auth"] });
       }
     } catch (error) {
       console.error("Error refreshing session:", error);
-      // If refresh fails, sign out directly
       try {
+        // Sign out from both API and client
+        const signOutResponse = await fetch("/api/auth/signout", {
+          method: "POST",
+        });
         await supabase.auth.signOut();
         setSession(null);
         queryClient.clear();
@@ -139,31 +222,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Auto-refresh session before it expires
   useEffect(() => {
-    if (!session?.expires_at) return;
+    // Don't auto-refresh if queries are still loading
+    if (sessionLoading || userLoading) {
+      return;
+    }
+
+    if (!session?.expires_at) {
+      return;
+    }
 
     // expires_at is in seconds (Unix timestamp), Date.now() is in milliseconds
     const expiresIn = session.expires_at * 1000 - Date.now();
     const refreshTime = expiresIn - 5 * 60 * 1000; // Refresh 5 minutes before expiry
 
     if (refreshTime > 0) {
+      // Schedule refresh before expiry
       const timeout = setTimeout(async () => {
-        await refreshSession();
+        try {
+          await refreshSession();
+        } catch (error) {
+          // If refresh fails, session will be cleared by refreshSession
+          console.error("Auto-refresh failed:", error);
+        }
       }, refreshTime);
 
       return () => clearTimeout(timeout);
+    } else if (expiresIn > -5 * 60 * 1000) {
+      // If token is already expired or about to expire (within 5 minutes), refresh immediately
+      // But only if not too far expired (more than 5 minutes means it's likely invalid)
+      refreshSession().catch((error) => {
+        console.error("Immediate refresh failed:", error);
+      });
     } else {
-      // If token is already expired or about to expire, refresh immediately
-      refreshSession();
+      // Token is too far expired, sign out
+      supabase.auth.signOut().catch(() => {
+        // Ignore errors
+      });
     }
-  }, [session, refreshSession]);
+  }, [session, refreshSession, sessionLoading, userLoading]);
 
   const signInMutation = useMutation({
     mutationFn: async (payload: { email: string; password: string }) => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: payload.email,
-        password: payload.password,
+      // Use API route to ensure cookies are set
+      const response = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      if (error) throw error;
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to sign in");
+      }
+      // Also set session in Supabase client for client-side state
+      if (data.session) {
+        await supabase.auth.setSession(data.session);
+      }
       return { user: data.user, session: data.session };
     },
     onSuccess: async () => {
@@ -179,33 +292,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password: string;
       name?: string;
     }) => {
-      const { data, error } = await supabase.auth.signUp({
-        email: payload.email,
-        password: payload.password,
-        options: {
-          data: {
-            name: payload.name,
-          },
-        },
+      // Use API route to ensure cookies are set
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      if (error) throw error;
-
-      // Create user profile if user was created
-      if (data.user) {
-        try {
-          await supabase.from("user_profiles").insert({
-            id: data.user.id,
-            email: data.user.email || payload.email,
-            name: payload.name || null,
-          });
-        } catch (profileError: any) {
-          // If profile already exists (from trigger), ignore the error
-          if (!profileError.message?.includes("duplicate")) {
-            console.error("Error creating user profile:", profileError);
-          }
-        }
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to sign up");
       }
-
+      // Also set session in Supabase client for client-side state
+      if (data.session) {
+        await supabase.auth.setSession(data.session);
+      }
       return { user: data.user, session: data.session };
     },
     onSuccess: async () => {
@@ -217,8 +317,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOutMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      // Use API route to ensure cookies are cleared
+      const token = session?.access_token;
+      const response = await fetch("/api/auth/signout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to sign out");
+      }
+      // Also sign out from Supabase client
+      await supabase.auth.signOut();
     },
     onSuccess: async () => {
       setSession(null);
@@ -232,11 +345,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  // Determine loading state - only loading if queries are actually loading
+  // React Query's isLoading is true only when loading AND no data exists
+  // Once a query resolves (with data or error), isLoading becomes false
+  // So we check if either query is still loading
+  // Also check if we have resolved data (even if null) - if so, we're not loading
+  const hasResolved =
+    (user !== undefined || userError) &&
+    (sessionData !== undefined || sessionError);
+  const isLoading = (userLoading || sessionLoading) && !hasResolved;
+
+  // User is authenticated only if we have both user and valid session
+  // Session is valid if it exists and is not expired
+  const isSessionValid = session?.expires_at
+    ? session.expires_at * 1000 > Date.now()
+    : !!session;
+  const isAuthenticated = !!user && !!session && isSessionValid;
+
   const value: AuthContextType = {
     user: user || null,
     session: session,
-    isLoading: userLoading || sessionLoading,
-    isAuthenticated: !!user && !!session,
+    isLoading,
+    isAuthenticated,
     signIn: async (email: string, password: string) => {
       await signInMutation.mutateAsync({ email, password });
     },

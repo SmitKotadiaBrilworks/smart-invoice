@@ -107,7 +107,11 @@ export default function UploadInvoiceModal({
         notes: data.extraction.notes,
         confidence: data.confidence || 0.8,
       };
-      setExtraction(extractionData);
+      setExtraction({
+        ...extractionData,
+        filePath: data.filePath,
+        mimeType: data.mimeType,
+      } as any);
       setCurrentStep(2);
       message.success("Invoice extracted successfully!");
       return extractionData;
@@ -128,12 +132,17 @@ export default function UploadInvoiceModal({
 
     setSaving(true);
     try {
+      // Extract file info if available
+      const { filePath, mimeType, ...extractionData } = extraction as any;
+
       await createInvoice.mutateAsync({
         workspace_id: workspaceId,
-        extraction,
+        extraction: extractionData,
         vendor_id: selectedVendorId,
         source: "upload",
         confidence: extraction.confidence,
+        file_path: filePath,
+        mime_type: mimeType,
       });
 
       message.success("Invoice created successfully!");

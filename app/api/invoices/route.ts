@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
       vendor_id: searchParams.get("vendor_id") || undefined,
       date_from: searchParams.get("date_from") || undefined,
       date_to: searchParams.get("date_to") || undefined,
+      invoice_type:
+        (searchParams.get("invoice_type") as "receivable" | "payable") ||
+        undefined,
     };
 
     const invoices = await invoiceBackend.getInvoices(workspaceId, filters);
@@ -71,6 +74,8 @@ export async function POST(request: NextRequest) {
       source,
       confidence,
       invoice_type,
+      file_path,
+      mime_type,
     } = body;
 
     if (!workspace_id || !extraction || !vendor_id) {
@@ -87,7 +92,9 @@ export async function POST(request: NextRequest) {
       user.id,
       source || "upload",
       confidence || 0.8,
-      invoice_type || "payable"
+      invoice_type || "payable",
+      file_path,
+      mime_type
     );
 
     return NextResponse.json({ invoice });

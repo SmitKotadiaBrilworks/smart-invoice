@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Form, Input, Button, Card, Typography } from "antd";
 import { message } from "@/lib/toast";
@@ -12,6 +12,7 @@ const { Title } = Typography;
 
 export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn } = useAuthContext();
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +21,9 @@ export default function SignInPage() {
     try {
       await signIn(values.email, values.password);
       message.success("Signed in successfully");
-      router.push("/dashboard");
+      // Redirect to the original page or dashboard
+      const redirect = searchParams.get("redirect") || "/dashboard";
+      router.push(redirect);
     } catch (error: any) {
       message.error(error.message || "Failed to sign in");
     } finally {

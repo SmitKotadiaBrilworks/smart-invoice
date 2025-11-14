@@ -7,6 +7,7 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useVendors } from "@/hooks/useVendors";
 import { useCreateInvoice } from "@/hooks/useInvoices";
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/constants/currencies";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Card,
@@ -44,11 +45,7 @@ export default function ManualInvoicePage() {
   const { data: vendors } = useVendors(selectedWorkspace?.id || "");
   const createInvoice = useCreateInvoice();
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   const addLineItem = () => {
     setLineItems([
@@ -173,13 +170,7 @@ export default function ManualInvoicePage() {
   };
 
   if (authLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {

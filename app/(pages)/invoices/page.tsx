@@ -6,6 +6,7 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useInvoices, useDeleteInvoice } from "@/hooks/useInvoices";
 import UploadInvoiceModal from "@/components/invoices/UploadInvoiceModal";
+import LoadingPage from "@/components/common/LoadingPage";
 import {
   Table,
   Button,
@@ -43,6 +44,9 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>(
     undefined
   );
+  const [typeFilter, setTypeFilter] = useState<
+    "receivable" | "payable" | undefined
+  >(undefined);
 
   const {
     data: invoices,
@@ -50,22 +54,14 @@ export default function InvoicesPage() {
     refetch,
   } = useInvoices(selectedWorkspace?.id || "", {
     status: statusFilter as any,
+    invoice_type: typeFilter,
   });
 
   const deleteInvoice = useDeleteInvoice();
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
-
+  // No need for redirect - middleware handles it
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spin size="large" />
-      </div>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {
@@ -95,24 +91,10 @@ export default function InvoicesPage() {
       title: "Type",
       key: "invoice_type",
       render: (_: any, record: Invoice) => {
-        // Current logic: draft = receivable, approved = payable
-        const isReceivable = record.status === "draft";
-        const isPayable = record.status === "approved";
-
-        // If paid or partially paid, check original type based on status history
-        // For now, we'll use the current status logic
-        let invoiceType: "receivable" | "payable" | "unknown";
-        if (isReceivable) {
-          invoiceType = "receivable";
-        } else if (
-          isPayable ||
-          record.status === "paid" ||
-          record.status === "partially_paid"
-        ) {
-          invoiceType = "payable";
-        } else {
-          invoiceType = "unknown";
-        }
+        // Use invoice_type from database, fallback to status-based logic for backward compatibility
+        const invoiceType =
+          record.invoice_type ||
+          (record.status === "draft" ? "receivable" : "payable");
 
         return (
           <Tag
@@ -140,8 +122,12 @@ export default function InvoicesPage() {
       key: "total",
       render: (amount: number, record: Invoice) => {
         // Color code amounts: green for receivables, red for payables
-        const isReceivable = record.status === "draft";
-        const isPayable = record.status === "approved";
+        // Use invoice_type from database, fallback to status-based logic
+        const invoiceType =
+          record.invoice_type ||
+          (record.status === "draft" ? "receivable" : "payable");
+        const isReceivable = invoiceType === "receivable";
+        const isPayable = invoiceType === "payable";
         const colorClass = isReceivable
           ? "text-green-600"
           : isPayable
@@ -324,15 +310,9 @@ export default function InvoicesPage() {
                 placeholder="Filter by type"
                 allowClear
                 style={{ width: 150 }}
+                value={typeFilter}
                 onChange={(value) => {
-                  // Filter by invoice type based on status
-                  if (value === "receivable") {
-                    setStatusFilter("draft");
-                  } else if (value === "payable") {
-                    setStatusFilter("approved");
-                  } else {
-                    setStatusFilter(undefined);
-                  }
+                  setTypeFilter(value || undefined);
                 }}
                 options={[
                   { label: "Receivable (Cash In)", value: "receivable" },
