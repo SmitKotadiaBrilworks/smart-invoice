@@ -37,7 +37,9 @@ import {
   SaveOutlined,
   EditOutlined,
   DownOutlined,
+  CreditCardOutlined,
 } from "@ant-design/icons";
+import StripePaymentModal from "@/components/payments/StripePaymentModal";
 import ConfidenceBadge from "@/components/ui/ConfidenceBadge";
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/constants/currencies";
 import type { Invoice, InvoiceLine } from "@/types";
@@ -103,6 +105,7 @@ export default function InvoiceReviewPage() {
   const [form] = Form.useForm();
   const [originalData, setOriginalData] = useState<Invoice | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [stripePaymentModalOpen, setStripePaymentModalOpen] = useState(false);
 
   const {
     data: invoice,
@@ -430,6 +433,18 @@ export default function InvoiceReviewPage() {
                 Approve & Save
               </Button>
             )}
+            {invoice.invoice_type === "payable" &&
+              invoice.status !== "paid" &&
+              invoice.status !== "partially_paid" && (
+                <Button
+                  type="primary"
+                  icon={<CreditCardOutlined />}
+                  onClick={() => setStripePaymentModalOpen(true)}
+                  style={{ background: "#635BFF", borderColor: "#635BFF" }}
+                >
+                  Pay with Stripe
+                </Button>
+              )}
           </Space>
         </div>
 
@@ -747,6 +762,22 @@ export default function InvoiceReviewPage() {
             </Card>
           </Col>
         </Row>
+
+        <StripePaymentModal
+          open={stripePaymentModalOpen}
+          onCancel={() => setStripePaymentModalOpen(false)}
+          onSuccess={() => {
+            setStripePaymentModalOpen(false);
+            refetch();
+            message.success("Payment processed successfully!");
+          }}
+          workspaceId={selectedWorkspace?.id || ""}
+          invoiceId={invoice.id}
+          amount={invoice.total}
+          currency={invoice.currency || "USD"}
+          customerEmail={invoice.vendor?.contact_email}
+          description={`Payment for invoice ${invoice.invoice_no}`}
+        />
       </div>
     </>
   );

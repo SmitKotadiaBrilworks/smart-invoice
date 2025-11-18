@@ -97,6 +97,24 @@ export const paymentBackend = {
     return data as Payment;
   },
 
+  // Update payment
+  updatePayment: async (
+    paymentId: string,
+    workspaceId: string,
+    updates: Partial<Payment>
+  ) => {
+    const { data, error } = await supabaseAdmin
+      .from("payments")
+      .update(updates)
+      .eq("id", paymentId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Payment;
+  },
+
   // Create payment match
   createMatch: async (
     workspaceId: string,
