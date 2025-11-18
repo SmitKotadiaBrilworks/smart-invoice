@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient, supabaseAdmin } from "@/lib/supabase/server";
 import { extractInvoiceFromImage } from "@/lib/ai/gemini";
 
 export async function POST(request: NextRequest) {
@@ -56,6 +56,36 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("normalizedMimeType", normalizedMimeType);
+
+    // Convert base64 to buffer for storage
+    const fileBuffer = Buffer.from(file, "base64");
+
+    // Generate a temporary file path (will be updated when invoice is created)
+    // For now, use a timestamp-based path
+    const tempFileName = `temp_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(7)}`;
+    const fileExtension =
+      normalizedMimeType === "application/pdf"
+        ? "pdf"
+        : normalizedMimeType.split("/")[1] || "jpg";
+    const tempFilePath = `${workspace_id}/temp/${tempFileName}.${fileExtension}`;
+
+    // Store file in Supabase Storage (temporary location)
+    // Note: The file will be moved to the final location when invoice is created
+    // Use admin client for storage operations to ensure proper permissions
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from("invoices")
+      .upload(tempFilePath, fileBuffer, {
+        contentType: normalizedMimeType,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Storage upload error:", uploadError);
+      // Continue with extraction even if storage fails
+    }
+
     // Extract invoice data using Gemini
     const result = await extractInvoiceFromImage(file, normalizedMimeType);
 
@@ -64,6 +94,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       extraction: result.extraction,
       confidence: result.confidence,
+      filePath: uploadData?.path || null, // Return the storage path
+      mimeType: normalizedMimeType,
     });
   } catch (error: any) {
     console.error("Upload error:", error);

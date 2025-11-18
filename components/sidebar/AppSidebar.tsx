@@ -202,21 +202,8 @@ export function AppSidebar({
   const handleSignOut = async () => {
     try {
       await signOut();
-      // Clear any cached data
-      if (typeof window !== "undefined") {
-        // Clear localStorage
-        localStorage.clear();
-        // Clear sessionStorage
-        sessionStorage.clear();
-      }
-      // Redirect to home/sign in page
-      router.push("/auth/signin");
-      // Force a hard reload to ensure all state is cleared
-      router.refresh();
     } catch (error) {
       console.error("Sign out error:", error);
-      // Even if there's an error, try to redirect
-      router.push("/auth/signin");
     }
   };
 

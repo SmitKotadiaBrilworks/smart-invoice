@@ -18,6 +18,7 @@ import {
 import PaymentModal from "@/components/payments/PaymentModal";
 import PaymentMatchModal from "@/components/payments/PaymentMatchModal";
 import PaymentDetailModal from "@/components/payments/PaymentDetailModal";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Table,
@@ -68,20 +69,9 @@ export default function PaymentsPage() {
   const createPaymentMatch = useCreatePaymentMatch();
   const deletePayment = useDeletePayment();
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
-
+  // No need for redirect - middleware handles it
   if (authLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {

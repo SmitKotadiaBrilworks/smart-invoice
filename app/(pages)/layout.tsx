@@ -44,8 +44,11 @@ function HeaderComponent() {
       icon: <LogoutOutlined />,
       label: "Logout",
       onClick: async () => {
-        await signOut();
-        router.push("/");
+        try {
+          await signOut();
+        } catch (error) {
+          console.error("Sign out error:", error);
+        }
       },
       danger: true,
     },
@@ -113,7 +116,7 @@ export default function PagesLayout({
 
   return (
     <SidebarProvider>
-      <Layout className="h-screen flex bg-blue-500">
+      <Layout className="h-screen flex w-screen">
         <AppSidebar
           filteredItems={filteredItems}
           filteredFooterItems={filteredFooterItems}

@@ -8,6 +8,7 @@ import { useDashboardKPIs } from "@/hooks/useDashboard";
 import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency, getCurrencySymbol } from "@/lib/constants/currencies";
 import CreateWorkspaceModal from "@/components/workspaces/CreateWorkspaceModal";
+import LoadingPage from "@/components/common/LoadingPage";
 import {
   Card,
   Row,
@@ -54,18 +55,9 @@ export default function DashboardPage() {
     ? getCurrencySymbol(selectedWorkspace.currency)
     : "$";
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
-
+  // No need for redirect - middleware handles it
   if (authLoading || workspacesLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spin size="large" />
-      </div>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {

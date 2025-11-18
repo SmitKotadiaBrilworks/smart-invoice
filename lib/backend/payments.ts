@@ -23,7 +23,10 @@ export const paymentBackend = {
         *,
         matches:payment_matches(
           *,
-          invoice:invoices(*)
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
         )
       `
       )
@@ -58,7 +61,10 @@ export const paymentBackend = {
         *,
         matches:payment_matches(
           *,
-          invoice:invoices(*)
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
         )
       `
       )
@@ -171,7 +177,10 @@ export const paymentBackend = {
         *,
         matches:payment_matches(
           *,
-          invoice:invoices(*)
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
         )
       `
       )
@@ -214,7 +223,10 @@ export const paymentBackend = {
         *,
         matches:payment_matches(
           *,
-          invoice:invoices(*)
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
         )
       `
       )

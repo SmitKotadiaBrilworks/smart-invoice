@@ -10,6 +10,7 @@ export const useInvoices = (
     vendor_id?: string;
     date_from?: string;
     date_to?: string;
+    invoice_type?: "receivable" | "payable";
   }
 ) => {
   return useQuery({
@@ -20,6 +21,8 @@ export const useInvoices = (
       if (filters?.vendor_id) params.append("vendor_id", filters.vendor_id);
       if (filters?.date_from) params.append("date_from", filters.date_from);
       if (filters?.date_to) params.append("date_to", filters.date_to);
+      if (filters?.invoice_type)
+        params.append("invoice_type", filters.invoice_type);
 
       const { data } = await apiClient.get(`/invoices?${params.toString()}`);
       return data.invoices as Invoice[];
@@ -51,6 +54,8 @@ export const useCreateInvoice = () => {
       vendor_id: string;
       source?: "upload" | "email";
       confidence?: number;
+      file_path?: string | null;
+      mime_type?: string;
     }) => {
       const { data } = await apiClient.post("/invoices", payload);
       return data.invoice as Invoice;
@@ -63,6 +68,8 @@ export const useCreateInvoice = () => {
         vendor_id: string;
         source?: "upload" | "email";
         confidence?: number;
+        file_path?: string | null;
+        mime_type?: string;
       }
     ) => {
       queryClient.invalidateQueries({

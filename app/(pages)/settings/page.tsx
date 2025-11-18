@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { CURRENCY_OPTIONS } from "@/lib/constants/currencies";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Card,
@@ -46,11 +47,7 @@ export default function SettingsPage() {
   } = useWorkspaceContext();
   const [workspaceForm] = Form.useForm();
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   useEffect(() => {
     if (selectedWorkspace) {
@@ -73,13 +70,7 @@ export default function SettingsPage() {
   };
 
   if (authLoading || workspacesLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {

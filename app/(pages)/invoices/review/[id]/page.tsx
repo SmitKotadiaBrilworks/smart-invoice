@@ -9,6 +9,7 @@ import {
   useUpdateInvoice,
   useApproveInvoice,
 } from "@/hooks/useInvoices";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Card,
@@ -44,6 +45,55 @@ import { format } from "date-fns";
 
 const { Title, Text } = Typography;
 
+// Component to handle iframe preview with authentication
+function InvoicePreviewFrame({
+  invoiceId,
+  workspaceId,
+}: {
+  invoiceId: string;
+  workspaceId: string;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getPreviewUrl = async () => {
+      try {
+        const { supabase } = await import("@/lib/supabase/client");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.access_token) {
+          // Pass token as query parameter for iframe (temporary solution)
+          // In production, consider using signed URLs or cookie-based auth
+          const url = `/api/invoices/${invoiceId}/preview?workspace_id=${workspaceId}&token=${session.access_token}`;
+          setPreviewUrl(url);
+        }
+      } catch (error) {
+        console.error("Error getting preview URL:", error);
+      }
+    };
+
+    getPreviewUrl();
+  }, [invoiceId, workspaceId]);
+
+  if (!previewUrl) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={previewUrl}
+      className="w-full h-full border-0"
+      title="Invoice Preview"
+    />
+  );
+}
+
 export default function InvoiceReviewPage() {
   const router = useRouter();
   const params = useParams();
@@ -63,11 +113,7 @@ export default function InvoiceReviewPage() {
   const updateInvoice = useUpdateInvoice();
   const approveInvoice = useApproveInvoice();
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   useEffect(() => {
     if (invoice) {
@@ -242,13 +288,7 @@ export default function InvoiceReviewPage() {
   };
 
   if (authLoading || invoiceLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user || !invoice) {
@@ -406,10 +446,9 @@ export default function InvoiceReviewPage() {
             >
               <div className="h-[600px] bg-bg border border-border rounded-lg overflow-hidden">
                 {invoice.source === "upload" ? (
-                  <iframe
-                    src={`/api/invoices/${invoice.id}/preview?workspace_id=${selectedWorkspace?.id}`}
-                    className="w-full h-full border-0"
-                    title="Invoice Preview"
+                  <InvoicePreviewFrame
+                    invoiceId={invoice.id}
+                    workspaceId={selectedWorkspace?.id || ""}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full">

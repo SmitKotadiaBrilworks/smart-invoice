@@ -107,7 +107,11 @@ export default function UploadInvoiceModal({
         notes: data.extraction.notes,
         confidence: data.confidence || 0.8,
       };
-      setExtraction(extractionData);
+      setExtraction({
+        ...extractionData,
+        filePath: data.filePath,
+        mimeType: data.mimeType,
+      } as any);
       setCurrentStep(2);
       message.success("Invoice extracted successfully!");
       return extractionData;
@@ -128,19 +132,44 @@ export default function UploadInvoiceModal({
 
     setSaving(true);
     try {
+      // Extract file info if available
+      const { filePath, mimeType, ...extractionData } = extraction as any;
+
       await createInvoice.mutateAsync({
         workspace_id: workspaceId,
-        extraction,
+        extraction: extractionData,
         vendor_id: selectedVendorId,
         source: "upload",
         confidence: extraction.confidence,
+        file_path: filePath,
+        mime_type: mimeType,
       });
 
       message.success("Invoice created successfully!");
       onSuccess?.();
       handleCancel();
     } catch (error: any) {
-      message.error(error.message || "Failed to save invoice");
+      // Handle duplicate invoice error specifically
+      if (
+        error.response?.status === 409 ||
+        error.response?.data?.code === "DUPLICATE_INVOICE"
+      ) {
+        const errorMessage =
+          error.response?.data?.error ||
+          error.message ||
+          "Invoice already exists";
+        message.error(errorMessage);
+        // Optionally, you could navigate to the existing invoice here
+        if (error.response?.data?.existingInvoice?.id) {
+          // Could add a link to view the existing invoice
+          console.log(
+            "Existing invoice ID:",
+            error.response.data.existingInvoice.id
+          );
+        }
+      } else {
+        message.error(error.message || "Failed to save invoice");
+      }
     } finally {
       setSaving(false);
     }

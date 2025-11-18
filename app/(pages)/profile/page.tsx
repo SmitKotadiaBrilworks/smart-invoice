@@ -25,6 +25,7 @@ import {
   EditOutlined,
 } from "@ant-design/icons";
 import { supabase } from "@/lib/supabase/client";
+import LoadingPage from "@/components/common/LoadingPage";
 
 const { Title, Text } = Typography;
 
@@ -37,11 +38,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   useEffect(() => {
     if (user) {
@@ -92,11 +89,7 @@ export default function ProfilePage() {
   };
 
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spin size="large" />
-      </div>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {
