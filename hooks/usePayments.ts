@@ -92,6 +92,7 @@ export const useCreatePayment = () => {
       fee?: number;
       net?: number;
       status?: PaymentStatus;
+      payment_direction?: "received" | "paid";
     }) => {
       const { data } = await apiClient.post("/payments", payload);
       return data.payment as Payment;
@@ -142,10 +143,10 @@ export const useUpdatePaymentMatch = () => {
       reason?: string;
     }) => {
       const { match_id, workspace_id, ...updates } = payload;
-      const { data } = await apiClient.patch(
-        `/payments/matches/${match_id}?workspace_id=${workspace_id}`,
-        updates
-      );
+      const { data } = await apiClient.patch(`/payments/matches/${match_id}`, {
+        ...updates,
+        workspace_id,
+      });
       return data.match as PaymentMatch;
     },
     onSuccess: (_, variables) => {

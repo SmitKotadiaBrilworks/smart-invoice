@@ -5,6 +5,7 @@ export interface StripeIntegration {
   id: string;
   provider: string;
   publishable_key: string | null;
+  webhook_secret?: string | null;
   is_active: boolean;
   metadata: any;
   created_at: string;

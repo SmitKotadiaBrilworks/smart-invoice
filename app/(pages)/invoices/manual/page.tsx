@@ -432,7 +432,11 @@ export default function ManualInvoicePage() {
                   columns={lineItemsColumns}
                   dataSource={lineItems}
                   rowKey={(_, index) => index?.toString() || ""}
-                  pagination={false}
+                  pagination={{
+                    pageSize: 5,
+                    showSizeChanger: false,
+                    showTotal: (total) => `Total ${total} invoices`,
+                  }}
                   size="small"
                 />
               )}

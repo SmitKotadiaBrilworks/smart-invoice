@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useMediaQuery } from "react-responsive";
 import { loadStripe, StripeElementsOptions } from "@stripe/stripe-js";
 import {
   Elements,
@@ -114,6 +115,7 @@ export default function StripePaymentModal({
   customerEmail,
   description,
 }: StripePaymentModalProps) {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [options, setOptions] = useState<StripeElementsOptions | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
@@ -169,9 +171,7 @@ export default function StripePaymentModal({
             });
           },
           onError: (error: any) => {
-            message.error(
-              error.response?.data?.error || "Failed to initialize payment"
-            );
+            // Error is already handled by global interceptor
             onCancel();
           },
         }
@@ -198,7 +198,15 @@ export default function StripePaymentModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
-      width={600}
+      centered
+      width={isMobile ? "90%" : 600}
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       {!stripeIntegration?.connected ? (
         <div className="text-center py-8">

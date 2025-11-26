@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMediaQuery } from "react-responsive";
 import { Modal, Form, Input, InputNumber, Button, Select } from "antd";
 import { message } from "@/lib/toast";
 import { useCreatePayment } from "@/hooks/usePayments";
@@ -20,10 +21,19 @@ export default function PaymentModal({
   onSuccess,
   workspaceId,
 }: PaymentModalProps) {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   const [form] = Form.useForm();
   const createPayment = useCreatePayment();
   const { selectedWorkspace } = useWorkspaceContext();
   const [loading, setLoading] = useState(false);
+
+  // Auto-calculate net amount when amount or fee changes
+  const handleAmountChange = () => {
+    const amount = form.getFieldValue("amount") || 0;
+    const fee = form.getFieldValue("fee") || 0;
+    const net = amount - fee;
+    form.setFieldsValue({ net: Math.max(0, net) });
+  };
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
@@ -40,13 +50,15 @@ export default function PaymentModal({
         fee: values.fee || 0,
         net: values.net || values.amount,
         status: "completed",
+        payment_direction: values.payment_direction || "received",
       });
       message.success("Payment added successfully!");
       form.resetFields();
       onSuccess?.();
       onCancel();
     } catch (error: any) {
-      message.error(error.message || "Failed to add payment");
+      // Error is already handled by global interceptor, just re-throw
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -68,7 +80,15 @@ export default function PaymentModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
-      width={600}
+      centered
+      width={isMobile ? "90%" : 600}
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       <Form
         form={form}
@@ -101,6 +121,7 @@ export default function PaymentModal({
             min={0}
             precision={2}
             placeholder="0.00"
+            onChange={handleAmountChange}
           />
         </Form.Item>
 
@@ -122,8 +143,24 @@ export default function PaymentModal({
 
         <Form.Item
           label={
-            <span className="font-medium text-text-primary">Received Date</span>
+            <span className="font-medium text-text-primary">
+              Payment Direction
+            </span>
           }
+          name="payment_direction"
+          rules={[
+            { required: true, message: "Please select payment direction" },
+          ]}
+          tooltip="Received: Money coming in (for receivable invoices). Paid: Money going out (for payable invoices)."
+        >
+          <Select placeholder="Select direction">
+            <Select.Option value="received">Received</Select.Option>
+            <Select.Option value="paid">Paid</Select.Option>
+          </Select>
+        </Form.Item>
+
+        <Form.Item
+          label={<span className="font-medium text-text-primary">Date</span>}
           name="received_at"
           rules={[{ required: true, message: "Please select date" }]}
         >
@@ -139,6 +176,7 @@ export default function PaymentModal({
             min={0}
             precision={2}
             placeholder="0.00"
+            onChange={handleAmountChange}
           />
         </Form.Item>
 
@@ -153,6 +191,8 @@ export default function PaymentModal({
             min={0}
             precision={2}
             placeholder="Auto-calculated"
+            readOnly
+            className="bg-gray-50"
           />
         </Form.Item>
 

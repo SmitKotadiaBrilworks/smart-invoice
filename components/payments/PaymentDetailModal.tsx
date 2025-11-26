@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useMediaQuery } from "react-responsive";
 import {
   Modal,
   Card,
@@ -29,6 +30,7 @@ export default function PaymentDetailModal({
   payment,
 }: PaymentDetailModalProps) {
   const router = useRouter();
+  const isMobile = useMediaQuery({ maxWidth: 768 });
 
   if (!payment) return null;
 
@@ -56,7 +58,15 @@ export default function PaymentDetailModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
-      width={700}
+      centered
+      width={isMobile ? "90%" : 700}
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       <div className="space-y-4">
         <Card className="bg-bg">
@@ -184,7 +194,7 @@ export default function PaymentDetailModal({
                         )}
                       </Text>
                       <div className="text-sm text-text-tertiary mt-1">
-                        Score: {match.score}%
+                        Score: {(match.score * 100).toFixed(1)}%
                       </div>
                     </div>
                   </div>

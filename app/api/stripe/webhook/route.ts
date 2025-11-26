@@ -3,6 +3,7 @@ import { paymentBackend } from "@/lib/backend/payments";
 import { getWorkspaceStripeClient } from "@/lib/stripe/workspace-client";
 import { headers } from "next/headers";
 import Stripe from "stripe";
+import { getStripeFixedFeeInCurrency } from "@/lib/utils/currency-conversion";
 
 // Disable body parsing for webhook route - Stripe needs raw body
 export const runtime = "nodejs";
@@ -39,9 +40,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Try to get workspace-specific webhook secret
+  // Check multiple places for workspace_id (payment intent, checkout session, charge)
+  // This is critical for identifying which workspace the payment belongs to
   const workspaceId =
     (event.data.object as any)?.metadata?.workspace_id ||
-    (event.data.object as any)?.payment_intent?.metadata?.workspace_id;
+    (event.data.object as any)?.payment_intent?.metadata?.workspace_id ||
+    (event.data.object as any)?.client_reference_id;
 
   if (workspaceId && !webhookSecret) {
     try {
@@ -110,6 +114,92 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case "payment_intent.created": {
+        // Payment intent created - just log it, don't process yet
+        // We'll process when payment_intent.succeeded fires
+        // Note: For Payment Links, metadata might not be set yet at creation time
+        // It will be set when checkout.session.completed fires
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        const { workspace_id } = paymentIntent.metadata || {};
+        if (workspace_id) {
+          console.log(
+            `Payment intent created: ${paymentIntent.id} for workspace ${workspace_id}`
+          );
+        } else {
+          // This is normal for Payment Links - metadata will be added later
+          console.log(
+            `Payment intent created: ${paymentIntent.id} (metadata will be set from checkout session)`
+          );
+        }
+        break;
+      }
+
+      case "checkout.session.completed": {
+        // Payment Links create checkout sessions
+        // CRITICAL: Extract metadata and ensure it's passed to payment intent
+        const session = event.data.object as Stripe.Checkout.Session;
+        const { workspace_id, invoice_id } = (session.metadata || {}) as {
+          workspace_id?: string;
+          invoice_id?: string;
+        };
+
+        if (!workspace_id) {
+          console.error(
+            `CRITICAL: Checkout session ${session.id} missing workspace_id in metadata. Cannot process payment.`
+          );
+          console.error(
+            "Session Metadata:",
+            JSON.stringify(session.metadata, null, 2)
+          );
+          break;
+        }
+
+        if (session.payment_intent) {
+          // ALWAYS update payment intent metadata to ensure workspace_id is present
+          // This is critical for payment processing
+          try {
+            const stripe = await getWorkspaceStripeClient(workspace_id);
+            if (stripe && typeof session.payment_intent === "string") {
+              const paymentIntent = await stripe.paymentIntents.retrieve(
+                session.payment_intent
+              );
+
+              // Update metadata to ensure workspace_id is always present
+              const updatedMetadata = {
+                workspace_id,
+                invoice_id:
+                  invoice_id || paymentIntent.metadata?.invoice_id || "",
+                user_id: paymentIntent.metadata?.user_id || "",
+                ...paymentIntent.metadata,
+              };
+
+              // Always update to ensure workspace_id is set
+              await stripe.paymentIntents.update(session.payment_intent, {
+                metadata: updatedMetadata,
+              });
+              console.log(
+                `✅ Updated payment intent ${session.payment_intent} metadata with workspace_id: ${workspace_id}`
+              );
+            }
+          } catch (updateError) {
+            console.error(
+              `CRITICAL: Error updating payment intent ${session.payment_intent} metadata:`,
+              updateError
+            );
+            // Don't break - let payment_intent.succeeded try to handle it
+          }
+        } else {
+          console.warn(
+            `Checkout session ${session.id} has no payment_intent. This might be a subscription or other payment type.`
+          );
+        }
+        console.log(
+          `Checkout session completed: ${session.id} for workspace ${workspace_id}`
+        );
+        // Payment will be handled by payment_intent.succeeded event
+        break;
+      }
+
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
@@ -127,10 +217,20 @@ export async function POST(request: NextRequest) {
 async function handlePaymentIntentSucceeded(
   paymentIntent: Stripe.PaymentIntent
 ) {
-  const { workspace_id, invoice_id } = paymentIntent.metadata;
+  // CRITICAL: workspace_id is required to identify which workspace/user to add payment to
+  // It should be set in metadata by checkout.session.completed handler for Payment Links
+  // or directly in payment intent metadata for direct Payment Intents
+  const workspace_id = paymentIntent.metadata?.workspace_id;
+  const invoice_id = paymentIntent.metadata?.invoice_id;
 
   if (!workspace_id) {
-    console.error("Missing workspace_id in payment intent metadata");
+    console.error(
+      `CRITICAL: Missing workspace_id in payment intent ${paymentIntent.id}. Cannot process payment.`
+    );
+    console.error(
+      "Payment Intent Metadata:",
+      JSON.stringify(paymentIntent.metadata, null, 2)
+    );
     return;
   }
 
@@ -149,8 +249,11 @@ async function handlePaymentIntentSucceeded(
   }
 
   // Calculate fees (Stripe charges 2.9% + $0.30 per transaction)
+  // Convert the fixed fee from USD to the payment currency
   const amount = paymentIntent.amount / 100; // Convert from cents
-  const fee = amount * 0.029 + 0.3; // 2.9% + $0.30
+  const currency = paymentIntent.currency.toUpperCase();
+  const fixedFee = await getStripeFixedFeeInCurrency(currency); // Convert $0.30 to payment currency
+  const fee = amount * 0.029 + fixedFee; // 2.9% + fixed fee in payment currency
   const net = amount - fee;
 
   // Create payment record
@@ -164,7 +267,7 @@ async function handlePaymentIntentSucceeded(
     amount,
     fee,
     net,
-    currency: paymentIntent.currency.toUpperCase(),
+    currency,
     received_at: new Date(paymentIntent.created * 1000).toISOString(),
     status: "completed",
     raw: paymentIntent as any,
@@ -172,8 +275,28 @@ async function handlePaymentIntentSucceeded(
 
   console.log(`Created payment record for payment intent ${paymentIntent.id}`);
 
-  // If invoice_id is provided, try to auto-match the payment
-  if (invoice_id && payment.id) {
+  // If invoice_id is provided, get invoice to determine payment direction
+  let paymentDirection: "received" | "paid" = "received";
+  if (invoice_id) {
+    try {
+      const { invoiceBackend } = await import("@/lib/backend/invoices");
+      const invoice = await invoiceBackend.getInvoice(invoice_id, workspace_id);
+      // Set direction based on invoice type
+      paymentDirection =
+        invoice.invoice_type === "payable" ? "paid" : "received";
+
+      // Update payment with direction
+      await paymentBackend.updatePayment(payment.id, workspace_id, {
+        payment_direction: paymentDirection,
+      });
+    } catch (invoiceError) {
+      console.error(
+        "Error fetching invoice for payment direction:",
+        invoiceError
+      );
+    }
+
+    // Try to auto-match the payment
     try {
       await paymentBackend.createMatch(
         workspace_id,
@@ -181,10 +304,10 @@ async function handlePaymentIntentSucceeded(
         payment.id,
         1.0, // Perfect match score
         "auto",
-        "Auto-matched from Stripe payment intent"
+        "Paid via Stripe - Auto-matched from payment intent"
       );
       console.log(
-        `Auto-matched payment ${payment.id} to invoice ${invoice_id}`
+        `Auto-matched payment ${payment.id} to invoice ${invoice_id} and updated invoice status`
       );
     } catch (matchError) {
       console.error("Error auto-matching payment to invoice:", matchError);
@@ -194,7 +317,7 @@ async function handlePaymentIntentSucceeded(
 }
 
 async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
-  const { workspace_id } = paymentIntent.metadata;
+  const { workspace_id } = paymentIntent.metadata || {};
 
   if (!workspace_id) {
     console.error("Missing workspace_id in payment intent metadata");
@@ -293,7 +416,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
   const paymentIntent = await workspaceStripe.paymentIntents.retrieve(
     paymentIntentId
   );
-  const { workspace_id } = paymentIntent.metadata;
+  const { workspace_id } = paymentIntent.metadata || {};
 
   if (!workspace_id) {
     console.error("Missing workspace_id in payment intent metadata");

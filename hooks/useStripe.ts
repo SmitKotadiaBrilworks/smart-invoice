@@ -26,3 +26,29 @@ export const useCreatePaymentIntent = () => {
     },
   });
 };
+
+export interface CreatePaymentLinkPayload {
+  amount: number;
+  currency: string;
+  workspace_id: string;
+  invoice_id?: string;
+  customer_email?: string;
+  description?: string;
+}
+
+export interface CreatePaymentLinkResponse {
+  paymentLink: string;
+  paymentLinkId: string;
+}
+
+export const useCreatePaymentLink = () => {
+  return useMutation({
+    mutationFn: async (payload: CreatePaymentLinkPayload) => {
+      const { data } = await apiClient.post<CreatePaymentLinkResponse>(
+        "/stripe/create-payment-link",
+        payload
+      );
+      return data;
+    },
+  });
+};

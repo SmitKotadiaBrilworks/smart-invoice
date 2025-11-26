@@ -86,6 +86,7 @@ export interface Payment {
   currency: string;
   received_at: string;
   status: "pending" | "completed" | "refunded" | "disputed";
+  payment_direction?: "received" | "paid";
   raw?: Record<string, any>;
   created_at: string;
   updated_at: string;

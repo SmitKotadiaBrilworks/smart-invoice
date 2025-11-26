@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { CURRENCY_OPTIONS } from "@/lib/constants/currencies";
@@ -48,12 +47,12 @@ import {
   EyeOutlined,
   EyeInvisibleOutlined,
 } from "@ant-design/icons";
+import { useMediaQuery } from "react-responsive";
 
 const { Title, Text } = Typography;
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthContext();
+  const { user, isLoading: authLoading } = useAuthContext();
   const {
     workspaces,
     selectedWorkspace,
@@ -63,9 +62,7 @@ export default function SettingsPage() {
   const [workspaceForm] = Form.useForm();
   const [stripeForm] = Form.useForm();
   const [showStripeForm, setShowStripeForm] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
-  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
-
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   // Get Stripe integration status
   const {
     data: stripeIntegration,
@@ -82,8 +79,8 @@ export default function SettingsPage() {
     if (stripeIntegration?.integration) {
       stripeForm.setFieldsValue({
         publishable_key: stripeIntegration.integration.publishable_key || "",
-        secret_key: "",
-        webhook_secret: "",
+        secret_key: "", // Never pre-fill secret key for security
+        webhook_secret: stripeIntegration.integration.webhook_secret || "",
       });
     } else {
       stripeForm.resetFields();
@@ -138,13 +135,27 @@ export default function SettingsPage() {
     }
 
     try {
-      await connectStripe.mutateAsync({
+      // Only send fields that have values (for updates, empty fields won't be sent)
+      const payload: any = {
         workspace_id: selectedWorkspace.id,
-        publishable_key: values.publishable_key,
-        secret_key: values.secret_key,
-        webhook_secret: values.webhook_secret || undefined,
-      });
-      message.success("Stripe integration connected successfully!");
+      };
+
+      if (values.publishable_key) {
+        payload.publishable_key = values.publishable_key;
+      }
+      if (values.secret_key) {
+        payload.secret_key = values.secret_key;
+      }
+      if (values.webhook_secret) {
+        payload.webhook_secret = values.webhook_secret;
+      }
+
+      await connectStripe.mutateAsync(payload);
+      message.success(
+        stripeIntegration?.connected
+          ? "Stripe integration updated successfully!"
+          : "Stripe integration connected successfully!"
+      );
       setShowStripeForm(false);
       stripeForm.resetFields();
       refetchStripe();
@@ -152,7 +163,7 @@ export default function SettingsPage() {
       message.error(
         error.response?.data?.error ||
           error.message ||
-          "Failed to connect Stripe"
+          "Failed to update Stripe integration"
       );
     }
   };
@@ -196,7 +207,7 @@ export default function SettingsPage() {
         </span>
       ),
       children: (
-        <Card className="card-shadow">
+        <Card className="card-shadow h-available w-available overflow-auto">
           <div className="mb-6">
             <Text strong className="text-text-primary block mb-2">
               Select Workspace
@@ -333,7 +344,7 @@ export default function SettingsPage() {
         </span>
       ),
       children: (
-        <Card className="card-shadow">
+        <Card className="card-shadow h-available w-available overflow-auto">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Title level={4} className="!mb-0 !text-text-primary">
@@ -392,7 +403,7 @@ export default function SettingsPage() {
         </span>
       ),
       children: (
-        <Card className="card-shadow">
+        <Card className="card-shadow h-available w-available overflow-auto">
           <div className="space-y-6">
             <Title level={4} className="!mb-0 !text-text-primary">
               Connected Integrations
@@ -476,168 +487,127 @@ export default function SettingsPage() {
                               Configured
                             </Text>
                           </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Text className="text-text-secondary">
+                                Webhook Secret
+                              </Text>
+                              <CheckCircleOutlined className="text-green-500" />
+                            </div>
+                            <Text className="text-text-tertiary text-sm">
+                              {stripeIntegration.integration.webhook_secret
+                                ? `${stripeIntegration.integration.webhook_secret.substring(
+                                    0,
+                                    20
+                                  )}...`
+                                : "Not set"}
+                            </Text>
+                          </div>
                         </div>
                       </>
                     )}
 
                   <Divider className="my-3" />
 
-                  {!stripeIntegration?.connected ? (
-                    <>
-                      {showStripeForm ? (
-                        <Form
-                          form={stripeForm}
-                          layout="vertical"
-                          onFinish={handleConnectStripe}
-                          className="space-y-4"
+                  {showStripeForm ? (
+                    <Form
+                      form={stripeForm}
+                      layout="vertical"
+                      onFinish={handleConnectStripe}
+                      className="space-y-4"
+                    >
+                      <Alert
+                        message={
+                          stripeIntegration?.connected
+                            ? "Update your Stripe API keys"
+                            : "Enter your Stripe API keys"
+                        }
+                        description="You can find these in your Stripe Dashboard under Developers > API keys"
+                        type="info"
+                        showIcon
+                        className="mb-4"
+                      />
+
+                      <Form.Item
+                        label="Publishable Key"
+                        name="publishable_key"
+                        rules={[
+                          {
+                            required: !stripeIntegration?.connected,
+                            message: "Publishable key is required",
+                          },
+                          {
+                            pattern: /^pk_/,
+                            message: "Publishable key must start with 'pk_'",
+                          },
+                        ]}
+                      >
+                        <Input placeholder="pk_test_..." prefix="💳" />
+                      </Form.Item>
+
+                      <Form.Item
+                        label="Secret Key"
+                        name="secret_key"
+                        help={
+                          stripeIntegration?.connected
+                            ? "Leave empty to keep existing secret key"
+                            : "Required for new connections"
+                        }
+                        rules={[
+                          {
+                            required: !stripeIntegration?.connected,
+                            message:
+                              "Secret key is required for new connections",
+                          },
+                          {
+                            pattern: /^sk_/,
+                            message: "Secret key must start with 'sk_'",
+                          },
+                        ]}
+                      >
+                        <Input.Password
+                          placeholder="sk_test_..."
+                          iconRender={(visible) =>
+                            visible ? <EyeOutlined /> : <EyeInvisibleOutlined />
+                          }
+                        />
+                      </Form.Item>
+
+                      <Form.Item
+                        label="Webhook Secret (Optional)"
+                        name="webhook_secret"
+                        help="Get this from Stripe Dashboard > Webhooks after configuring your endpoint"
+                      >
+                        <Input.Password
+                          placeholder="whsec_..."
+                          iconRender={(visible) =>
+                            visible ? <EyeOutlined /> : <EyeInvisibleOutlined />
+                          }
+                        />
+                      </Form.Item>
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            setShowStripeForm(false);
+                            stripeForm.resetFields();
+                          }}
                         >
-                          <Alert
-                            message="Enter your Stripe API keys"
-                            description="You can find these in your Stripe Dashboard under Developers > API keys"
-                            type="info"
-                            showIcon
-                            className="mb-4"
-                          />
-
-                          <Form.Item
-                            label="Publishable Key"
-                            name="publishable_key"
-                            rules={[
-                              {
-                                required: true,
-                                message: "Publishable key is required",
-                              },
-                              {
-                                pattern: /^pk_/,
-                                message:
-                                  "Publishable key must start with 'pk_'",
-                              },
-                            ]}
-                          >
-                            <Input placeholder="pk_test_..." prefix="💳" />
-                          </Form.Item>
-
-                          <Form.Item
-                            label="Secret Key"
-                            name="secret_key"
-                            rules={[
-                              {
-                                required: true,
-                                message: "Secret key is required",
-                              },
-                              {
-                                pattern: /^sk_/,
-                                message: "Secret key must start with 'sk_'",
-                              },
-                            ]}
-                          >
-                            <Input.Password
-                              placeholder="sk_test_..."
-                              iconRender={(visible) =>
-                                visible ? (
-                                  <EyeOutlined />
-                                ) : (
-                                  <EyeInvisibleOutlined />
-                                )
-                              }
-                            />
-                          </Form.Item>
-
-                          <Form.Item
-                            label="Webhook Secret (Optional)"
-                            name="webhook_secret"
-                            help="Get this from Stripe Dashboard > Webhooks after configuring your endpoint"
-                          >
-                            <Input.Password
-                              placeholder="whsec_..."
-                              iconRender={(visible) =>
-                                visible ? (
-                                  <EyeOutlined />
-                                ) : (
-                                  <EyeInvisibleOutlined />
-                                )
-                              }
-                            />
-                          </Form.Item>
-
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => {
-                                setShowStripeForm(false);
-                                stripeForm.resetFields();
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              type="primary"
-                              htmlType="submit"
-                              loading={connectStripe.isPending}
-                            >
-                              Connect Stripe
-                            </Button>
-                          </div>
-                        </Form>
-                      ) : (
-                        <>
-                          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                            <div className="flex items-start gap-2">
-                              <InfoCircleOutlined className="text-blue-500 mt-0.5" />
-                              <div className="flex-1">
-                                <Text
-                                  strong
-                                  className="text-blue-900 dark:text-blue-100 block mb-1"
-                                >
-                                  How to Get Your Stripe Keys
-                                </Text>
-                                <ol className="text-blue-800 dark:text-blue-200 text-sm space-y-1 list-decimal list-inside">
-                                  <li>
-                                    Go to{" "}
-                                    <a
-                                      href="https://dashboard.stripe.com"
-                                      target="_blank"
-                                      className="underline"
-                                    >
-                                      Stripe Dashboard
-                                    </a>
-                                  </li>
-                                  <li>Navigate to Developers → API keys</li>
-                                  <li>
-                                    Copy your Publishable key (starts with
-                                    pk_test_ or pk_live_)
-                                  </li>
-                                  <li>
-                                    Copy your Secret key (starts with sk_test_
-                                    or sk_live_)
-                                  </li>
-                                </ol>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button
-                              type="primary"
-                              onClick={() => setShowStripeForm(true)}
-                            >
-                              Connect Stripe
-                            </Button>
-                            <Button
-                              icon={<LinkOutlined />}
-                              onClick={() => {
-                                window.open(
-                                  "https://dashboard.stripe.com/apikeys",
-                                  "_blank"
-                                );
-                              }}
-                            >
-                              Get API Keys
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : (
+                          Cancel
+                        </Button>
+                        <Button
+                          type="primary"
+                          htmlType="submit"
+                          loading={connectStripe.isPending}
+                        >
+                          {stripeIntegration?.connected
+                            ? "Update Keys"
+                            : "Connect Stripe"}
+                        </Button>
+                      </div>
+                    </Form>
+                  ) : stripeIntegration?.connected ? (
                     <div className="flex gap-2">
                       <Button
                         onClick={() => setShowStripeForm(true)}
@@ -666,6 +636,63 @@ export default function SettingsPage() {
                         Configure Webhook
                       </Button>
                     </div>
+                  ) : (
+                    <>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-start gap-2">
+                          <InfoCircleOutlined className="text-blue-500 mt-0.5" />
+                          <div className="flex-1">
+                            <Text
+                              strong
+                              className="text-blue-900 dark:text-blue-100 block mb-1"
+                            >
+                              How to Get Your Stripe Keys
+                            </Text>
+                            <ol className="text-blue-800 dark:text-blue-200 text-sm space-y-1 list-decimal list-inside">
+                              <li>
+                                Go to{" "}
+                                <a
+                                  href="https://dashboard.stripe.com"
+                                  target="_blank"
+                                  className="underline"
+                                >
+                                  Stripe Dashboard
+                                </a>
+                              </li>
+                              <li>Navigate to Developers → API keys</li>
+                              <li>
+                                Copy your Publishable key (starts with pk_test_
+                                or pk_live_)
+                              </li>
+                              <li>
+                                Copy your Secret key (starts with sk_test_ or
+                                sk_live_)
+                              </li>
+                            </ol>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          type="primary"
+                          onClick={() => setShowStripeForm(true)}
+                        >
+                          Connect Stripe
+                        </Button>
+                        <Button
+                          icon={<LinkOutlined />}
+                          onClick={() => {
+                            window.open(
+                              "https://dashboard.stripe.com/apikeys",
+                              "_blank"
+                            );
+                          }}
+                        >
+                          Get API Keys
+                        </Button>
+                      </div>
+                    </>
                   )}
                 </div>
               </Card>
@@ -701,7 +728,7 @@ export default function SettingsPage() {
         </span>
       ),
       children: (
-        <Card className="card-shadow">
+        <Card className="card-shadow h-available w-available overflow-auto">
           <div className="space-y-6">
             <Title level={4} className="!mb-0 !text-text-primary">
               Alert Preferences
@@ -765,13 +792,15 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-6 h-available w-available overflow-hidden">
         <Title level={2} className="!mb-0 !font-bold !text-text-primary">
           Settings
         </Title>
-        <Card className="card-shadow">
-          <Tabs items={tabItems} className="overflow-x-auto" />
-        </Card>
+
+        <Tabs
+          items={tabItems}
+          className="h-available w-available overflow-auto"
+        />
       </div>
     </>
   );

@@ -69,6 +69,7 @@ export interface Database {
           id: string;
           email: string;
           name: string | null;
+          profile_picture: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -76,6 +77,7 @@ export interface Database {
           id: string;
           email: string;
           name?: string | null;
+          profile_picture?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -83,6 +85,7 @@ export interface Database {
           id?: string;
           email?: string;
           name?: string | null;
+          profile_picture?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -396,6 +399,7 @@ export interface Database {
           currency: string;
           received_at: string;
           status: PaymentStatus;
+          payment_direction: "received" | "paid" | null;
           raw: Json | null;
           created_at: string;
           updated_at: string;
@@ -412,6 +416,7 @@ export interface Database {
           currency?: string;
           received_at: string;
           status?: PaymentStatus;
+          payment_direction?: "received" | "paid" | null;
           raw?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -428,6 +433,7 @@ export interface Database {
           currency?: string;
           received_at?: string;
           status?: PaymentStatus;
+          payment_direction?: "received" | "paid" | null;
           raw?: Json | null;
           created_at?: string;
           updated_at?: string;

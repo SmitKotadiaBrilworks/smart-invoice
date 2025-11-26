@@ -7,6 +7,12 @@ module.exports = {
   ],
   theme: {
     extend: {
+      width: {
+        available: ["-webkit-fill-available", "-moz-available"],
+      },
+      height: {
+        available: ["-webkit-fill-available", "-moz-available"],
+      },
       colors: {
         primary: {
           DEFAULT: "#0284C7",

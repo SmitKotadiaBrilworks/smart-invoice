@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMediaQuery } from "react-responsive";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useInvoices, useDeleteInvoice } from "@/hooks/useInvoices";
 import UploadInvoiceModal from "@/components/invoices/UploadInvoiceModal";
+import InvoiceCard from "@/components/invoices/InvoiceCard";
 import LoadingPage from "@/components/common/LoadingPage";
 import {
   Table,
@@ -25,7 +27,6 @@ import {
   PlusOutlined,
   UploadOutlined,
   EyeOutlined,
-  CheckOutlined,
   ReloadOutlined,
   DeleteOutlined,
   MoreOutlined,
@@ -38,8 +39,9 @@ const { Title } = Typography;
 
 export default function InvoicesPage() {
   const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthContext();
+  const { user, isLoading: authLoading } = useAuthContext();
   const { selectedWorkspace } = useWorkspaceContext();
+  const isMobile = useMediaQuery({ maxWidth: 768 }); // md breakpoint
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(
     undefined
@@ -284,18 +286,21 @@ export default function InvoicesPage() {
   ];
 
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <Title level={2} className="!mb-0 !font-bold !text-text-primary">
-            Invoices
-          </Title>
-          <Space direction="vertical" size="small" className="w-full sm:w-auto">
-            <Space wrap className="w-full sm:w-auto">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <Title level={2} className="!mb-0 !font-bold !text-text-primary">
+          Invoices
+        </Title>
+        <Space direction="vertical" size="small" className="w-full sm:w-auto">
+          <Space
+            wrap
+            className="flex flex-col sm:flex-row items-stretch gap-2 w-full sm:w-auto"
+          >
+            <div className="flex flex-row gap-3 w-full sm:w-auto">
               <Select
                 placeholder="Filter by status"
                 allowClear
-                style={{ width: 150 }}
+                style={{ width: isMobile ? "50%" : 150, height: "40px" }}
                 value={statusFilter}
                 onChange={setStatusFilter}
                 options={[
@@ -309,7 +314,7 @@ export default function InvoicesPage() {
               <Select
                 placeholder="Filter by type"
                 allowClear
-                style={{ width: 150 }}
+                style={{ width: isMobile ? "50%" : 150, height: "40px" }}
                 value={typeFilter}
                 onChange={(value) => {
                   setTypeFilter(value || undefined);
@@ -319,11 +324,13 @@ export default function InvoicesPage() {
                   { label: "Payable (Cash Out)", value: "payable" },
                 ]}
               />
+            </div>
+            <div className="flex flex-row gap-3 w-full sm:w-auto">
               <Button
                 type="primary"
                 icon={<UploadOutlined />}
                 onClick={() => setUploadModalOpen(true)}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-10"
               >
                 Upload Invoice
               </Button>
@@ -332,68 +339,89 @@ export default function InvoicesPage() {
                 onClick={() => {
                   router.push("/invoices/manual");
                 }}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-10"
               >
                 Manual Entry
               </Button>
-            </Space>
+            </div>
           </Space>
-        </div>
-
-        <Card className="card-shadow">
-          {invoicesLoading ? (
-            <div className="flex justify-center py-12">
-              <Spin size="large" />
-            </div>
-          ) : !invoices || invoices.length === 0 ? (
-            <div className="py-12">
-              <Empty
-                description="No invoices yet"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              >
-                <p className="text-text-tertiary mb-4 mt-4">
-                  Drag & drop your first invoice to begin AI extraction
-                </p>
-                <Button
-                  type="primary"
-                  size="large"
-                  icon={<UploadOutlined />}
-                  onClick={() => setUploadModalOpen(true)}
-                  className="h-12 px-8"
-                >
-                  Upload Your First Invoice
-                </Button>
-              </Empty>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table
-                columns={columns}
-                dataSource={invoices}
-                rowKey="id"
-                pagination={{
-                  pageSize: 10,
-                  showSizeChanger: true,
-                  showTotal: (total) => `Total ${total} invoices`,
-                }}
-                scroll={{ x: "max-content" }}
-              />
-            </div>
-          )}
-        </Card>
-
-        {selectedWorkspace && (
-          <UploadInvoiceModal
-            open={uploadModalOpen}
-            onCancel={() => setUploadModalOpen(false)}
-            workspaceId={selectedWorkspace.id}
-            onSuccess={() => {
-              refetch();
-              setUploadModalOpen(false);
-            }}
-          />
-        )}
+        </Space>
       </div>
-    </>
+
+      <Card
+        className="card-shadow"
+        bodyStyle={{ padding: isMobile ? "0px" : "16px" }}
+      >
+        {invoicesLoading ? (
+          <div className="flex justify-center py-12">
+            <Spin size="large" />
+          </div>
+        ) : !invoices || invoices.length === 0 ? (
+          <div className="py-12">
+            <Empty
+              description="No invoices yet"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              <p className="text-text-tertiary mb-4 mt-4">
+                Drag & drop your first invoice to begin AI extraction
+              </p>
+              <Button
+                type="primary"
+                size="large"
+                icon={<UploadOutlined />}
+                onClick={() => setUploadModalOpen(true)}
+                className="h-12 px-8"
+              >
+                Upload Your First Invoice
+              </Button>
+            </Empty>
+          </div>
+        ) : isMobile ? (
+          /* Mobile Card View */
+          <div>
+            {invoices.map((invoice) => (
+              <InvoiceCard
+                key={invoice.id}
+                invoice={invoice}
+                workspaceId={selectedWorkspace?.id || ""}
+                onRefetch={refetch}
+              />
+            ))}
+            {/* Simple pagination for mobile */}
+            <div className="text-center mt-4 text-sm text-text-tertiary">
+              Showing {invoices.length} invoice
+              {invoices.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+        ) : (
+          /* Desktop Table View */
+          <div className="overflow-x-auto">
+            <Table
+              columns={columns}
+              dataSource={invoices}
+              rowKey="id"
+              pagination={{
+                pageSize: 5,
+                showSizeChanger: false,
+                showTotal: (total) => `Total ${total} invoices`,
+              }}
+              scroll={{ x: "max-content" }}
+            />
+          </div>
+        )}
+      </Card>
+
+      {selectedWorkspace && (
+        <UploadInvoiceModal
+          open={uploadModalOpen}
+          onCancel={() => setUploadModalOpen(false)}
+          workspaceId={selectedWorkspace.id}
+          onSuccess={() => {
+            refetch();
+            setUploadModalOpen(false);
+          }}
+        />
+      )}
+    </div>
   );
 }
