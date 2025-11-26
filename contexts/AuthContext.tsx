@@ -319,18 +319,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else if (event === "SIGNED_OUT") {
         setSession(null);
+        // Clear client-side cookies
+        if (typeof window !== "undefined") {
+          clientTokenManager.clearTokens();
+        }
         // Clear query data directly - don't invalidate to prevent refetch loops
         queryClient.setQueryData(["auth", "user"], null);
         queryClient.setQueryData(["auth", "session"], null);
         // Cancel any ongoing queries to prevent infinite loading
         queryClient.cancelQueries({ queryKey: ["auth"] });
+        // Clear all queries
+        queryClient.clear();
         // Don't invalidate - just clear the data
 
         // Don't refetch - we're doing a full page reload anyway
         // Navigate to sign-in page
-        // Use window.location.replace for full page reload so middleware can read cleared cookies
+        // Use window.location.href for full page reload so middleware can read cleared cookies
         if (typeof window !== "undefined") {
-          window.location.replace("/auth/signin");
+          // Small delay to ensure cookies are processed
+          setTimeout(() => {
+            window.location.href = "/auth/signin";
+          }, 200);
         }
       }
     });
@@ -574,8 +583,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOutMutation = useMutation({
     mutationFn: async () => {
-      // First, clear client-side state (localStorage, Supabase client)
+      // First, clear client-side cookies immediately
       if (typeof window !== "undefined") {
+        // Clear client-side cookies first
+        clientTokenManager.clearTokens();
+
         // Clear all Supabase-related localStorage items
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -624,35 +636,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       queryClient.setQueryData(["auth", "session"], null);
       // Cancel any ongoing queries to prevent infinite loading
       queryClient.cancelQueries({ queryKey: ["auth"] });
+      // Clear all queries to ensure no stale data
+      queryClient.clear();
       // Don't invalidate - we're clearing data directly and doing a full page reload
 
       // Don't refetch - we're doing a full page reload anyway
-      // Small delay to ensure cookies are cleared
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Longer delay to ensure cookies are fully cleared and browser processes the deletion
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Always navigate to sign-in page
       // Use window.location.replace for full page reload so middleware can read cleared cookies
       if (typeof window !== "undefined") {
-        window.location.replace("/auth/signin");
+        // Force a hard reload to ensure cookies are cleared
+        window.location.href = "/auth/signin";
       }
     },
     onError: async (err) => {
       // On error, still attempt navigation to signin so user isn't locked out
       console.error("Sign out failed:", err);
+      // Clear client-side cookies even on error
+      if (typeof window !== "undefined") {
+        clientTokenManager.clearTokens();
+      }
       // Clear state even on error
       setSession(null);
       queryClient.setQueryData(["auth", "user"], null);
       queryClient.setQueryData(["auth", "session"], null);
       // Cancel any ongoing queries
       queryClient.cancelQueries({ queryKey: ["auth"] });
+      // Clear all queries
+      queryClient.clear();
       // Don't invalidate - we're clearing data directly and doing a full page reload
 
-      // Small delay to ensure state is cleared
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Longer delay to ensure state is cleared
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Use window.location.replace for full page reload
+      // Use window.location.href for full page reload
       if (typeof window !== "undefined") {
-        window.location.replace("/auth/signin");
+        window.location.href = "/auth/signin";
       }
     },
   });

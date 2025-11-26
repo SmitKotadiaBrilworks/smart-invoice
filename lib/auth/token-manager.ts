@@ -129,24 +129,35 @@ export class TokenManager {
   // Clear all tokens from a NextResponse
   static clearTokens(response: NextResponse) {
     // Delete cookies by setting them with expired date
+    // Must match the same attributes used when setting cookies
+    const isProduction = process.env.NODE_ENV === "production";
     response.cookies.set(AUTH_TOKEN_KEY, "", {
       expires: new Date(0),
       path: "/",
+      secure: isProduction,
+      sameSite: "lax",
+      httpOnly: false,
     });
     response.cookies.set(REFRESH_TOKEN_KEY, "", {
       expires: new Date(0),
       path: "/",
+      secure: isProduction,
+      sameSite: "lax",
+      httpOnly: false,
     });
     response.cookies.set(USER_ID_KEY, "", {
       expires: new Date(0),
       path: "/",
+      secure: isProduction,
+      sameSite: "lax",
+      httpOnly: false,
     });
   }
 
   static getUserIdFromToken(token: string): string | null {
     try {
       const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const base64 = base64Url.replaceAll("-", "+").replaceAll("_", "/");
       const payload = JSON.parse(
         Buffer.from(base64, "base64").toString("utf-8")
       );
