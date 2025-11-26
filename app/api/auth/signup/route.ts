@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
           expires_at: data.session.expires_at!,
-          user_id: data.user.id,
+          user_id: data.user?.id ?? null,
         },
         response
       );
