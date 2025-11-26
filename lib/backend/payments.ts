@@ -1,9 +1,75 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Payment, PaymentMatch } from "@/types";
 import type {
+  InvoiceStatus,
   PaymentSource,
   PaymentStatus,
 } from "@/lib/supabase/database.types";
+
+// Helper function to update invoice status based on payment matches
+async function updateInvoiceStatusFromMatches(
+  workspaceId: string,
+  invoiceId: string
+) {
+  // Get invoice with all matches
+  const { data: invoice, error: invoiceError } = await supabaseAdmin
+    .from("invoices")
+    .select(
+      `
+      *,
+      matches:payment_matches(
+        *,
+        payment:payments(*)
+      )
+    `
+    )
+    .eq("id", invoiceId)
+    .eq("workspace_id", workspaceId)
+    .single();
+
+  if (invoiceError || !invoice) {
+    console.error("Error fetching invoice for status update:", invoiceError);
+    return;
+  }
+
+  // Calculate total matched amount
+  const totalMatched = (invoice.matches || []).reduce(
+    (sum: number, match: any) => {
+      if (match.payment && match.payment.status === "completed") {
+        return sum + (match.payment.amount || 0);
+      }
+      return sum;
+    },
+    0
+  );
+
+  const invoiceTotal = invoice.total || 0;
+  let newStatus: string = invoice.status;
+
+  // Update status based on matched amount
+  if (totalMatched >= invoiceTotal) {
+    newStatus = "paid";
+  } else if (totalMatched > 0) {
+    newStatus = "partially_paid";
+  }
+
+  // Only update if status changed
+  if (newStatus !== invoice.status) {
+    const { error: updateError } = await supabaseAdmin
+      .from("invoices")
+      .update({ status: newStatus as InvoiceStatus })
+      .eq("id", invoiceId)
+      .eq("workspace_id", workspaceId);
+
+    if (updateError) {
+      console.error("Error updating invoice status:", updateError);
+    } else {
+      console.log(
+        `Updated invoice ${invoiceId} status from ${invoice.status} to ${newStatus}`
+      );
+    }
+  }
+}
 
 export const paymentBackend = {
   // Get payments for a workspace
@@ -23,7 +89,10 @@ export const paymentBackend = {
         *,
         matches:payment_matches(
           *,
-          invoice:invoices(*)
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
         )
       `
       )
@@ -58,7 +127,10 @@ export const paymentBackend = {
         *,
         matches:payment_matches(
           *,
-          invoice:invoices(*)
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
         )
       `
       )
@@ -91,6 +163,24 @@ export const paymentBackend = {
     return data as Payment;
   },
 
+  // Update payment
+  updatePayment: async (
+    paymentId: string,
+    workspaceId: string,
+    updates: Partial<Payment>
+  ) => {
+    const { data, error } = await supabaseAdmin
+      .from("payments")
+      .update(updates)
+      .eq("id", paymentId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Payment;
+  },
+
   // Create payment match
   createMatch: async (
     workspaceId: string,
@@ -114,23 +204,122 @@ export const paymentBackend = {
       .single();
 
     if (error) throw error;
+
+    // Update invoice status based on payment matches
+    await updateInvoiceStatusFromMatches(workspaceId, invoiceId);
+
     return data as PaymentMatch;
+  },
+
+  // Update payment match
+  updateMatch: async (
+    matchId: string,
+    workspaceId: string,
+    updates: {
+      invoice_id?: string;
+      score?: number;
+      reason?: string;
+    }
+  ) => {
+    const { data, error } = await supabaseAdmin
+      .from("payment_matches")
+      .update(updates)
+      .eq("id", matchId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PaymentMatch;
+  },
+
+  // Delete payment match (unmatch)
+  deleteMatch: async (matchId: string, workspaceId: string) => {
+    const { error } = await supabaseAdmin
+      .from("payment_matches")
+      .delete()
+      .eq("id", matchId)
+      .eq("workspace_id", workspaceId);
+
+    if (error) throw error;
+    return true;
   },
 
   // Get unmatched payments
   getUnmatchedPayments: async (workspaceId: string) => {
+    // Get all payment IDs that have matches
+    const { data: matchedPayments, error: matchError } = await supabaseAdmin
+      .from("payment_matches")
+      .select("payment_id")
+      .eq("workspace_id", workspaceId);
+
+    if (matchError) throw matchError;
+
+    const matchedPaymentIds = matchedPayments?.map((m) => m.payment_id) || [];
+
+    // Get all payments for the workspace
+    let query = supabaseAdmin
+      .from("payments")
+      .select(
+        `
+        *,
+        matches:payment_matches(
+          *,
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
+        )
+      `
+      )
+      .eq("workspace_id", workspaceId)
+      .order("received_at", { ascending: false });
+
+    const { data: allPayments, error } = await query;
+
+    if (error) throw error;
+
+    // Filter out payments that have matches
+    const unmatchedPayments = (allPayments || []).filter(
+      (payment) => !matchedPaymentIds.includes(payment.id)
+    );
+
+    return unmatchedPayments as Payment[];
+  },
+
+  // Get matched payments
+  getMatchedPayments: async (workspaceId: string) => {
+    // Get all payment IDs that have matches
+    const { data: matchedPayments, error: matchError } = await supabaseAdmin
+      .from("payment_matches")
+      .select("payment_id")
+      .eq("workspace_id", workspaceId);
+
+    if (matchError) throw matchError;
+
+    const matchedPaymentIds = matchedPayments?.map((m) => m.payment_id) || [];
+
+    if (matchedPaymentIds.length === 0) {
+      return [];
+    }
+
+    // Get all payments that ARE in the matched list
     const { data, error } = await supabaseAdmin
       .from("payments")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .not(
-        "id",
-        "in",
-        supabaseAdmin
-          .from("payment_matches")
-          .select("payment_id")
-          .eq("workspace_id", workspaceId)
+      .select(
+        `
+        *,
+        matches:payment_matches(
+          *,
+          invoice:invoices(
+            *,
+            vendor:vendors(*)
+          )
+        )
+      `
       )
+      .eq("workspace_id", workspaceId)
+      .in("id", matchedPaymentIds)
       .order("received_at", { ascending: false });
 
     if (error) throw error;
@@ -153,14 +342,15 @@ export const paymentBackend = {
 
     if (error) throw error;
 
-    // Calculate match scores
+    // Calculate match scores (stored as 0-1 decimal, converted to percentage for display)
     const matches = invoices.map((invoice) => {
       const amountDiff = Math.abs(invoice.total - payment.amount);
-      const score = 100 - (amountDiff / payment.amount) * 100;
+      const scorePercent = 100 - (amountDiff / payment.amount) * 100;
+      const score = Math.max(0, scorePercent) / 100; // Convert to 0-1 decimal format
 
       return {
         invoice,
-        score: Math.max(0, score),
+        score, // Store as 0-1 decimal (e.g., 0.9831 for 98.31%)
         reason: `Amount within ${((amountDiff / payment.amount) * 100).toFixed(
           1
         )}%`,
@@ -168,5 +358,45 @@ export const paymentBackend = {
     });
 
     return matches.sort((a, b) => b.score - a.score);
+  },
+
+  // Delete payment
+  deletePayment: async (paymentId: string, workspaceId: string) => {
+    // Get all matches for this payment to update invoice statuses
+    const { data: matches, error: matchesError } = await supabaseAdmin
+      .from("payment_matches")
+      .select("invoice_id")
+      .eq("payment_id", paymentId)
+      .eq("workspace_id", workspaceId);
+
+    if (matchesError) throw matchesError;
+
+    // Get unique invoice IDs that will be affected
+    const affectedInvoiceIds = [
+      ...new Set((matches || []).map((m) => m.invoice_id)),
+    ];
+
+    // Delete all matches for this payment
+    const { error: deleteMatchesError } = await supabaseAdmin
+      .from("payment_matches")
+      .delete()
+      .eq("payment_id", paymentId)
+      .eq("workspace_id", workspaceId);
+
+    if (deleteMatchesError) throw deleteMatchesError;
+
+    // Note: Invoice status updates would need to be handled here if needed
+    // For now, we'll just delete the matches and payment
+
+    // Delete the payment itself
+    const { error: deletePaymentError } = await supabaseAdmin
+      .from("payments")
+      .delete()
+      .eq("id", paymentId)
+      .eq("workspace_id", workspaceId);
+
+    if (deletePaymentError) throw deletePaymentError;
+
+    return { success: true };
   },
 };

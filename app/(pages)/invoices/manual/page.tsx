@@ -7,6 +7,7 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useVendors } from "@/hooks/useVendors";
 import { useCreateInvoice } from "@/hooks/useInvoices";
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/constants/currencies";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Card,
@@ -44,11 +45,7 @@ export default function ManualInvoicePage() {
   const { data: vendors } = useVendors(selectedWorkspace?.id || "");
   const createInvoice = useCreateInvoice();
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   const addLineItem = () => {
     setLineItems([
@@ -168,18 +165,24 @@ export default function ManualInvoicePage() {
       message.success("Invoice created successfully");
       router.push("/invoices");
     } catch (error: any) {
-      message.error(error.message || "Failed to create invoice");
+      // Handle duplicate invoice error specifically
+      if (
+        error.response?.status === 409 ||
+        error.response?.data?.code === "DUPLICATE_INVOICE"
+      ) {
+        const errorMessage =
+          error.response?.data?.error ||
+          error.message ||
+          "Invoice already exists";
+        message.error(errorMessage);
+      } else {
+        message.error(error.message || "Failed to create invoice");
+      }
     }
   };
 
   if (authLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {
@@ -429,7 +432,11 @@ export default function ManualInvoicePage() {
                   columns={lineItemsColumns}
                   dataSource={lineItems}
                   rowKey={(_, index) => index?.toString() || ""}
-                  pagination={false}
+                  pagination={{
+                    pageSize: 5,
+                    showSizeChanger: false,
+                    showTotal: (total) => `Total ${total} invoices`,
+                  }}
                   size="small"
                 />
               )}

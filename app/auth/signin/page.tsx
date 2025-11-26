@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Form, Input, Button, Card, Typography } from "antd";
 import { message } from "@/lib/toast";
@@ -11,7 +10,6 @@ import Link from "next/link";
 const { Title } = Typography;
 
 export default function SignInPage() {
-  const router = useRouter();
   const { signIn } = useAuthContext();
   const [loading, setLoading] = useState(false);
 
@@ -19,11 +17,10 @@ export default function SignInPage() {
     setLoading(true);
     try {
       await signIn(values.email, values.password);
-      message.success("Signed in successfully");
-      router.push("/dashboard");
+      // Don't show success message here - navigation happens immediately via window.location.replace
+      // Navigation is handled by AuthContext onSuccess callback
     } catch (error: any) {
       message.error(error.message || "Failed to sign in");
-    } finally {
       setLoading(false);
     }
   };

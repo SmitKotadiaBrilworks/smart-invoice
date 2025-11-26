@@ -44,6 +44,19 @@ export const useUnmatchedPayments = (workspaceId: string) => {
   });
 };
 
+export const useMatchedPayments = (workspaceId: string) => {
+  return useQuery({
+    queryKey: ["payments", "matched", workspaceId],
+    queryFn: async () => {
+      const { data } = await apiClient.get(
+        `/payments/matched?workspace_id=${workspaceId}`
+      );
+      return data.payments as Payment[];
+    },
+    enabled: !!workspaceId,
+  });
+};
+
 export const usePaymentSuggestions = (
   paymentId: string,
   workspaceId: string
@@ -79,6 +92,7 @@ export const useCreatePayment = () => {
       fee?: number;
       net?: number;
       status?: PaymentStatus;
+      payment_direction?: "received" | "paid";
     }) => {
       const { data } = await apiClient.post("/payments", payload);
       return data.payment as Payment;
@@ -112,6 +126,85 @@ export const useCreatePaymentMatch = () => {
       });
       queryClient.invalidateQueries({
         queryKey: ["invoices", variables.workspace_id],
+      });
+    },
+  });
+};
+
+export const useUpdatePaymentMatch = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      match_id: string;
+      workspace_id: string;
+      invoice_id?: string;
+      score?: number;
+      reason?: string;
+    }) => {
+      const { match_id, workspace_id, ...updates } = payload;
+      const { data } = await apiClient.patch(`/payments/matches/${match_id}`, {
+        ...updates,
+        workspace_id,
+      });
+      return data.match as PaymentMatch;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["payments", variables.workspace_id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["invoices", variables.workspace_id],
+      });
+    },
+  });
+};
+
+export const useDeletePaymentMatch = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { match_id: string; workspace_id: string }) => {
+      const { match_id, workspace_id } = payload;
+      await apiClient.delete(
+        `/payments/matches/${match_id}?workspace_id=${workspace_id}`
+      );
+      return true;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["payments", variables.workspace_id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["invoices", variables.workspace_id],
+      });
+    },
+  });
+};
+
+export const useDeletePayment = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      payment_id: string;
+      workspace_id: string;
+    }) => {
+      const { payment_id, workspace_id } = payload;
+      await apiClient.delete(
+        `/payments/${payment_id}?workspace_id=${workspace_id}`
+      );
+      return true;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["payments", variables.workspace_id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["invoices", variables.workspace_id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["dashboard", variables.workspace_id],
       });
     },
   });

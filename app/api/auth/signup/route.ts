@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, supabaseAdmin } from "@/lib/supabase/server";
+import { TokenManager } from "@/lib/auth/token-manager";
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,7 +35,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ user: data.user, session: data.session });
+    // Create response
+    const response = NextResponse.json({
+      user: data.user,
+      session: data.session,
+    });
+
+    // Set tokens in cookies if session exists
+    if (data.session) {
+      TokenManager.setTokens(
+        {
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+          expires_at: data.session.expires_at!,
+          user_id: data.user?.id ?? null,
+        },
+        response
+      );
+    }
+
+    return response;
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

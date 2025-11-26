@@ -22,14 +22,20 @@ export default function SignUpPage() {
   }) => {
     setLoading(true);
     try {
-      await signUp(values.email, values.password, values.name);
-      message.success(
-        "Account created successfully! Please check your email to verify."
-      );
-      router.push("/auth/signin");
+      const result = await signUp(values.email, values.password, values.name);
+      // If session exists (user is auto-confirmed), navigation handled by AuthContext
+      if (result?.session) {
+        message.success("Account created successfully!");
+        // Navigation is handled by AuthContext onAuthStateChange callback
+      } else {
+        // Email confirmation required
+        message.success(
+          "Account created successfully! Please check your email to verify."
+        );
+        router.push("/auth/signin");
+      }
     } catch (error: any) {
       message.error(error.message || "Failed to create account");
-    } finally {
       setLoading(false);
     }
   };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useMediaQuery } from "react-responsive";
 import { Modal, Form, Input, Button } from "antd";
 import { message } from "@/lib/toast";
 import { useCreateVendor, useUpdateVendor } from "@/hooks/useVendors";
@@ -21,6 +22,7 @@ export default function VendorModal({
   workspaceId,
   vendor,
 }: VendorModalProps) {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   const [form] = Form.useForm();
   const createVendor = useCreateVendor();
   const updateVendor = useUpdateVendor();
@@ -69,7 +71,8 @@ export default function VendorModal({
       onSuccess?.();
       onCancel();
     } catch (error: any) {
-      message.error(error.message || "Failed to save vendor");
+      // Error is already handled by global interceptor, just re-throw
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,15 @@ export default function VendorModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
-      width={600}
+      centered
+      width={isMobile ? "90%" : 600}
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       <Form form={form} layout="vertical" onFinish={handleSubmit} size="large">
         <Form.Item

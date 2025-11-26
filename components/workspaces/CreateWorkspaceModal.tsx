@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMediaQuery } from "react-responsive";
 import { Modal, Form, Input, Select, Button } from "antd";
 import { message } from "@/lib/toast";
 import { useCreateWorkspace } from "@/hooks/useWorkspaces";
@@ -32,6 +33,7 @@ export default function CreateWorkspaceModal({
   onCancel,
   onSuccess,
 }: CreateWorkspaceModalProps) {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   const [form] = Form.useForm();
   const createWorkspace = useCreateWorkspace();
   const { setSelectedWorkspace } = useWorkspaceContext();
@@ -55,7 +57,8 @@ export default function CreateWorkspaceModal({
       onSuccess?.();
       onCancel();
     } catch (error: any) {
-      message.error(error.message || "Failed to create workspace");
+      // Error is already handled by global interceptor, just re-throw
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -77,8 +80,16 @@ export default function CreateWorkspaceModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
-      width={600}
+      centered
+      width={isMobile ? "90%" : 600}
       className="create-workspace-modal"
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       <Form
         form={form}

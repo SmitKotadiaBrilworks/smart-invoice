@@ -132,7 +132,7 @@ a,
 }
 
 .kpi-carousel .slick-dots {
-  bottom: -32px;
+  bottom: -20px;
 }
 
 .kpi-carousel .slick-dots li {
@@ -146,14 +146,21 @@ a,
   height: 8px;
   padding: 0;
   border-radius: 50%;
-  background: #d1d5db;
+  background: #5a5b5d;
   transition: all 0.3s ease;
 }
 
 .kpi-carousel .slick-dots li.slick-active button {
-  background: var(--color-primary);
+  background: #3394f5;
   width: 24px;
   border-radius: 4px;
+  opacity: 1;
+  transform: none !important;
+}
+
+.kpi-carousel .slick-dots li.slick-active::after {
+  background: #3394f5;
+  transform: none !important;
 }
 
 .kpi-carousel .slick-dots li button:before {

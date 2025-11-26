@@ -49,6 +49,7 @@ export interface Invoice {
   tax_total: number;
   total: number;
   status: "draft" | "approved" | "paid" | "partially_paid" | "overdue";
+  invoice_type?: "receivable" | "payable";
   confidence: number;
   source: "upload" | "email";
   duplicate_of?: string;
@@ -85,6 +86,7 @@ export interface Payment {
   currency: string;
   received_at: string;
   status: "pending" | "completed" | "refunded" | "disputed";
+  payment_direction?: "received" | "paid";
   raw?: Record<string, any>;
   created_at: string;
   updated_at: string;

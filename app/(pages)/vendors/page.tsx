@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useMediaQuery } from "react-responsive";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useVendors } from "@/hooks/useVendors";
 import VendorModal from "@/components/vendors/VendorModal";
+import VendorCard from "@/components/vendors/VendorCard";
+import LoadingPage from "@/components/common/LoadingPage";
 
 import {
   Table,
@@ -23,9 +25,9 @@ import type { Vendor } from "@/types";
 const { Title } = Typography;
 
 export default function VendorsPage() {
-  const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthContext();
+  const { user, isLoading: authLoading } = useAuthContext();
   const { selectedWorkspace } = useWorkspaceContext();
+  const isMobile = useMediaQuery({ maxWidth: 768 }); // md breakpoint
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
@@ -33,20 +35,10 @@ export default function VendorsPage() {
     selectedWorkspace?.id || ""
   );
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
+  // No need for redirect - middleware handles it
 
   if (authLoading) {
-    return (
-      <>
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
-      </>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {
@@ -96,86 +88,106 @@ export default function VendorsPage() {
   ];
 
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <Title level={2} className="!mb-0 !font-bold !text-text-primary">
-            Vendors
-          </Title>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingVendor(null);
-              setVendorModalOpen(true);
-            }}
-            className="w-full sm:w-auto"
-          >
-            Add Vendor
-          </Button>
-        </div>
-
-        <Card className="card-shadow">
-          {vendorsLoading ? (
-            <div className="flex justify-center py-12">
-              <Spin size="large" />
-            </div>
-          ) : !vendors || vendors.length === 0 ? (
-            <div className="py-12">
-              <Empty
-                description="No vendors yet"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              >
-                <p className="text-text-tertiary mb-4 mt-4">
-                  Add vendors to organize your invoices
-                </p>
-                <Button
-                  type="primary"
-                  size="large"
-                  icon={<PlusOutlined />}
-                  onClick={() => {
-                    setEditingVendor(null);
-                    setVendorModalOpen(true);
-                  }}
-                  className="h-12 px-8"
-                >
-                  Add Your First Vendor
-                </Button>
-              </Empty>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table
-                columns={columns}
-                dataSource={vendors}
-                rowKey="id"
-                pagination={{
-                  pageSize: 10,
-                  showSizeChanger: true,
-                  showTotal: (total) => `Total ${total} vendors`,
-                }}
-                scroll={{ x: "max-content" }}
-              />
-            </div>
-          )}
-        </Card>
-
-        {selectedWorkspace && (
-          <VendorModal
-            open={vendorModalOpen}
-            onCancel={() => {
-              setVendorModalOpen(false);
-              setEditingVendor(null);
-            }}
-            workspaceId={selectedWorkspace.id}
-            vendor={editingVendor}
-            onSuccess={() => {
-              setVendorModalOpen(false);
-              setEditingVendor(null);
-            }}
-          />
-        )}
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <Title level={2} className="!mb-0 !font-bold !text-text-primary">
+          Vendors
+        </Title>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setEditingVendor(null);
+            setVendorModalOpen(true);
+          }}
+          className="w-full sm:w-auto"
+        >
+          Add Vendor
+        </Button>
       </div>
-    </>
+
+      <Card
+        className="border-none shadow-none md:card-shadow"
+        bodyStyle={{ padding: isMobile ? "0px" : "16px" }}
+      >
+        {vendorsLoading ? (
+          <div className="flex justify-center py-12">
+            <Spin size="large" />
+          </div>
+        ) : !vendors || vendors.length === 0 ? (
+          <div className="py-12">
+            <Empty
+              description="No vendors yet"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              <p className="text-text-tertiary mb-4 mt-4">
+                Add vendors to organize your invoices
+              </p>
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setEditingVendor(null);
+                  setVendorModalOpen(true);
+                }}
+                className="h-12 px-8"
+              >
+                Add Your First Vendor
+              </Button>
+            </Empty>
+          </div>
+        ) : isMobile ? (
+          /* Mobile Card View */
+          <div>
+            {vendors.map((vendor) => (
+              <VendorCard
+                key={vendor.id}
+                vendor={vendor}
+                onEdit={() => {
+                  setEditingVendor(vendor);
+                  setVendorModalOpen(true);
+                }}
+              />
+            ))}
+            {/* Simple pagination for mobile */}
+            <div className="text-center mt-4 text-sm text-text-tertiary">
+              Showing {vendors.length} vendor{vendors.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+        ) : (
+          /* Desktop Table View */
+          <div className="overflow-x-auto">
+            <Table
+              columns={columns}
+              dataSource={vendors}
+              rowKey="id"
+              pagination={{
+                pageSize: 5,
+                showSizeChanger: false,
+                showTotal: (total) => `Total ${total} vendors`,
+              }}
+              scroll={{ x: "max-content" }}
+            />
+          </div>
+        )}
+      </Card>
+
+      {selectedWorkspace && (
+        <VendorModal
+          open={vendorModalOpen}
+          onCancel={() => {
+            setVendorModalOpen(false);
+            setEditingVendor(null);
+          }}
+          workspaceId={selectedWorkspace.id}
+          vendor={editingVendor}
+          onSuccess={() => {
+            setVendorModalOpen(false);
+            setEditingVendor(null);
+          }}
+        />
+      )}
+    </div>
   );
 }

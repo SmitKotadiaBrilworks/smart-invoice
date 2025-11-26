@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { TokenManager } from "@/lib/auth/token-manager";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,12 +10,25 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient(token);
     const { error } = await supabase.auth.signOut();
 
+    // Create response
+    const response = NextResponse.json({ success: true });
+
+    // Clear tokens from cookies
+    TokenManager.clearTokens(response);
+
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      // Even if signOut fails, clear cookies
+      return response;
     }
 
-    return NextResponse.json({ success: true });
+    return response;
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Still clear cookies even on error
+    const response = NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
+    TokenManager.clearTokens(response);
+    return response;
   }
 }

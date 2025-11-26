@@ -1,30 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
-import { useDashboardKPIs } from "@/hooks/useDashboard";
+import { useDashboardKPIs, useARAging } from "@/hooks/useDashboard";
 import { useInvoices } from "@/hooks/useInvoices";
-import { formatCurrency, getCurrencySymbol } from "@/lib/constants/currencies";
+import { formatCurrency } from "@/lib/constants/currencies";
 import CreateWorkspaceModal from "@/components/workspaces/CreateWorkspaceModal";
+import LoadingPage from "@/components/common/LoadingPage";
 import {
   Card,
-  Row,
-  Col,
   Statistic,
   Typography,
-  Spin,
   Empty,
   Button,
-  Table,
   Tooltip,
   Carousel,
+  Tag,
+  Spin,
+  Divider,
 } from "antd";
 import {
-  DollarOutlined,
-  FileTextOutlined,
-  ClockCircleOutlined,
   WarningOutlined,
   PlusOutlined,
   ArrowRightOutlined,
@@ -36,7 +33,7 @@ const { Title } = Typography;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthContext();
+  const { user, isLoading: authLoading } = useAuthContext();
   const {
     workspaces,
     selectedWorkspace,
@@ -48,23 +45,13 @@ export default function DashboardPage() {
     selectedWorkspace?.id || ""
   );
   const { data: invoices } = useInvoices(selectedWorkspace?.id || "", {});
+  const { data: arAging, isLoading: arAgingLoading } = useARAging(
+    selectedWorkspace?.id || ""
+  );
 
-  const currencySymbol = selectedWorkspace
-    ? getCurrencySymbol(selectedWorkspace.currency)
-    : "$";
-
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/");
-    }
-  }, [isAuthenticated, authLoading, router]);
-
+  // No need for redirect - middleware handles it
   if (authLoading || workspacesLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spin size="large" />
-      </div>
-    );
+    return <LoadingPage />;
   }
 
   if (!user) {
@@ -137,165 +124,173 @@ export default function DashboardPage() {
 
         {/* Desktop/Tablet: Grid Layout */}
         <div className="hidden sm:block">
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={8} lg={4}>
-              <Card className="hover-tint">
-                <Statistic
-                  title={
-                    <span className="flex items-center gap-2">
-                      Cash In (Expected)
-                      <Tooltip title="Total amount from draft invoices (receivables) that are not yet matched to payments. This represents money you expect to receive from customers. Independent from Cash Out.">
-                        <InfoCircleOutlined className="text-text-tertiary cursor-help" />
-                      </Tooltip>
-                    </span>
-                  }
-                  value={kpis?.cash_in_expected || 0}
-                  prefix={""}
-                  formatter={(value) =>
-                    formatCurrency(
-                      Number(value),
-                      selectedWorkspace?.currency || "USD"
-                    )
-                  }
-                  loading={kpisLoading}
-                  valueStyle={{
-                    color: "#16A34A",
-                    fontSize: "24px",
-                    fontWeight: 600,
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={8} lg={4}>
-              <Card className="hover-tint">
-                <Statistic
-                  title={
-                    <span className="flex items-center gap-2">
-                      Cash Out (Expected)
-                      <Tooltip title="Total amount from approved vendor invoices (payables) that are not yet matched to payments. This represents money you need to pay to vendors. Independent from Cash In.">
-                        <InfoCircleOutlined className="text-text-tertiary cursor-help" />
-                      </Tooltip>
-                    </span>
-                  }
-                  value={kpis?.cash_out_expected || 0}
-                  prefix={""}
-                  formatter={(value) =>
-                    formatCurrency(
-                      Number(value),
-                      selectedWorkspace?.currency || "USD"
-                    )
-                  }
-                  loading={kpisLoading}
-                  valueStyle={{
-                    color: "#DC2626",
-                    fontSize: "24px",
-                    fontWeight: 600,
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={8} lg={4}>
-              <Card className="hover-tint">
-                <Statistic
-                  title={
-                    <span className="flex items-center gap-2">
-                      Amount Received
-                      <Tooltip title="Total amount from payments matched to draft invoices (receivables). This represents money already received from customers.">
-                        <InfoCircleOutlined className="text-text-tertiary cursor-help" />
-                      </Tooltip>
-                    </span>
-                  }
-                  value={kpis?.amount_received || 0}
-                  prefix={""}
-                  formatter={(value) =>
-                    formatCurrency(
-                      Number(value),
-                      selectedWorkspace?.currency || "USD"
-                    )
-                  }
-                  loading={kpisLoading}
-                  valueStyle={{
-                    color: "#10B981",
-                    fontSize: "24px",
-                    fontWeight: 600,
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={8} lg={4}>
-              <Card className="hover-tint">
-                <Statistic
-                  title={
-                    <span className="flex items-center gap-2">
-                      Amount Paid
-                      <Tooltip title="Total amount from payments matched to approved invoices (payables). This represents money already paid to vendors.">
-                        <InfoCircleOutlined className="text-text-tertiary cursor-help" />
-                      </Tooltip>
-                    </span>
-                  }
-                  value={kpis?.amount_paid || 0}
-                  prefix={""}
-                  formatter={(value) =>
-                    formatCurrency(
-                      Number(value),
-                      selectedWorkspace?.currency || "USD"
-                    )
-                  }
-                  loading={kpisLoading}
-                  valueStyle={{
-                    color: "#2563EB",
-                    fontSize: "24px",
-                    fontWeight: 600,
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={8} lg={4}>
-              <Card className="hover-tint">
-                <Statistic
-                  title={
-                    <span className="flex items-center gap-2">
-                      Overdue Invoices
-                      <Tooltip title="Number of invoices that have passed their due date and are not yet paid.">
-                        <InfoCircleOutlined className="text-text-tertiary cursor-help" />
-                      </Tooltip>
-                    </span>
-                  }
-                  value={kpis?.overdue_count || 0}
-                  prefix={<WarningOutlined className="text-warning" />}
-                  loading={kpisLoading}
-                  valueStyle={{
-                    color: "#EAB308",
-                    fontSize: "24px",
-                    fontWeight: 600,
-                  }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={8} lg={4}>
-              <Card className="hover-tint">
-                <Statistic
-                  title={
-                    <span className="flex items-center gap-2">
-                      Avg Days to Collect
-                      <Tooltip title="Average number of days from invoice issue date to payment date for paid invoices.">
-                        <InfoCircleOutlined className="text-text-tertiary cursor-help" />
-                      </Tooltip>
-                    </span>
-                  }
-                  value={kpis?.avg_days_to_collect || 0}
-                  prefix={<ClockCircleOutlined className="text-primary" />}
-                  suffix="days"
-                  loading={kpisLoading}
-                  valueStyle={{
-                    fontSize: "24px",
-                    fontWeight: 600,
-                    color: "#111827",
-                  }}
-                />
-              </Card>
-            </Col>
-          </Row>
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <Card className="hover-tint">
+              <Statistic
+                title={
+                  <span className="flex items-center gap-2">
+                    Cash In (Expected)
+                    <Tooltip
+                      title="Total amount from draft invoices (receivables) that are not yet matched to payments. This represents money you expect to receive from customers. Independent from Cash Out."
+                      trigger="hover"
+                      mouseEnterDelay={0.1}
+                    >
+                      <InfoCircleOutlined className="text-text-tertiary cursor-help" />
+                    </Tooltip>
+                  </span>
+                }
+                value={kpis?.cash_in_expected || 0}
+                prefix={""}
+                formatter={(value) =>
+                  formatCurrency(
+                    Number(value),
+                    selectedWorkspace?.currency || "USD"
+                  )
+                }
+                loading={kpisLoading}
+                valueStyle={{
+                  color: "#16A34A",
+                  fontSize: "24px",
+                  fontWeight: 600,
+                }}
+              />
+            </Card>
+            <Card className="hover-tint">
+              <Statistic
+                title={
+                  <span className="flex items-center gap-2">
+                    Cash Out (Expected)
+                    <Tooltip
+                      title="Total amount from approved vendor invoices (payables) that are not yet matched to payments. This represents money you need to pay to vendors. Independent from Cash In."
+                      trigger="hover"
+                      mouseEnterDelay={0.1}
+                    >
+                      <InfoCircleOutlined className="text-text-tertiary cursor-help" />
+                    </Tooltip>
+                  </span>
+                }
+                value={kpis?.cash_out_expected || 0}
+                prefix={""}
+                formatter={(value) =>
+                  formatCurrency(
+                    Number(value),
+                    selectedWorkspace?.currency || "USD"
+                  )
+                }
+                loading={kpisLoading}
+                valueStyle={{
+                  color: "#DC2626",
+                  fontSize: "24px",
+                  fontWeight: 600,
+                }}
+              />
+            </Card>
+            <Card className="hover-tint">
+              <Statistic
+                title={
+                  <span className="flex items-center gap-2">
+                    Amount Received
+                    <Tooltip
+                      title="Total amount from payments matched to draft invoices (receivables). This represents money already received from customers."
+                      trigger="hover"
+                      mouseEnterDelay={0.1}
+                    >
+                      <InfoCircleOutlined className="text-text-tertiary cursor-help" />
+                    </Tooltip>
+                  </span>
+                }
+                value={kpis?.amount_received || 0}
+                prefix={""}
+                formatter={(value) =>
+                  formatCurrency(
+                    Number(value),
+                    selectedWorkspace?.currency || "USD"
+                  )
+                }
+                loading={kpisLoading}
+                valueStyle={{
+                  color: "#10B981",
+                  fontSize: "24px",
+                  fontWeight: 600,
+                }}
+              />
+            </Card>
+            <Card className="hover-tint">
+              <Statistic
+                title={
+                  <span className="flex items-center gap-2">
+                    Amount Paid
+                    <Tooltip
+                      title="Total amount from payments matched to approved invoices (payables). This represents money already paid to vendors."
+                      trigger="hover"
+                      mouseEnterDelay={0.1}
+                    >
+                      <InfoCircleOutlined className="text-text-tertiary cursor-help" />
+                    </Tooltip>
+                  </span>
+                }
+                value={kpis?.amount_paid || 0}
+                prefix={""}
+                formatter={(value) =>
+                  formatCurrency(
+                    Number(value),
+                    selectedWorkspace?.currency || "USD"
+                  )
+                }
+                loading={kpisLoading}
+                valueStyle={{
+                  color: "#2563EB",
+                  fontSize: "24px",
+                  fontWeight: 600,
+                }}
+              />
+            </Card>
+            <Card className="hover-tint">
+              <Statistic
+                title={
+                  <span className="flex items-center gap-2">
+                    Overdue Invoices
+                    <Tooltip
+                      title="Number of invoices that have passed their due date and are not yet paid."
+                      trigger="hover"
+                      mouseEnterDelay={0.1}
+                    >
+                      <InfoCircleOutlined className="text-text-tertiary cursor-help" />
+                    </Tooltip>
+                  </span>
+                }
+                value={kpis?.overdue_count || 0}
+                prefix={<WarningOutlined className="text-warning" />}
+                loading={kpisLoading}
+                valueStyle={{
+                  color: "#EAB308",
+                  fontSize: "24px",
+                  fontWeight: 600,
+                }}
+              />
+            </Card>
+            {/* <Card className="hover-tint">
+              <Statistic
+                title={
+                  <span className="flex items-center gap-2">
+                    Avg Days to Collect
+                    <Tooltip title="Average number of days from invoice issue date to payment date for paid invoices.">
+                      <InfoCircleOutlined className="text-text-tertiary cursor-help" />
+                    </Tooltip>
+                  </span>
+                }
+                value={kpis?.avg_days_to_collect || 0}
+                prefix={<ClockCircleOutlined className="text-primary" />}
+                suffix="days"
+                loading={kpisLoading}
+                valueStyle={{
+                  fontSize: "24px",
+                  fontWeight: 600,
+                  color: "#111827",
+                }}
+              />
+            </Card> */}
+          </div>
         </div>
 
         {/* Mobile: Carousel Slider */}
@@ -308,7 +303,7 @@ export default function DashboardPage() {
             swipe={true}
             touchMove={true}
             className="kpi-carousel"
-            style={{ marginBottom: "24px" }}
+            style={{ marginBottom: "36px" }}
           >
             <div>
               <Card className="hover-tint mx-2">
@@ -316,7 +311,11 @@ export default function DashboardPage() {
                   title={
                     <span className="flex items-center gap-2">
                       Cash In (Expected)
-                      <Tooltip title="Total amount from draft invoices (receivables) that are not yet matched to payments. This represents money you expect to receive from customers. Independent from Cash Out.">
+                      <Tooltip
+                        title="Total amount from draft invoices (receivables) that are not yet matched to payments. This represents money you expect to receive from customers. Independent from Cash Out."
+                        trigger="hover"
+                        mouseEnterDelay={0.1}
+                      >
                         <InfoCircleOutlined className="text-text-tertiary cursor-help" />
                       </Tooltip>
                     </span>
@@ -344,7 +343,11 @@ export default function DashboardPage() {
                   title={
                     <span className="flex items-center gap-2">
                       Cash Out (Expected)
-                      <Tooltip title="Total amount from approved vendor invoices (payables) that are not yet matched to payments. This represents money you need to pay to vendors. Independent from Cash In.">
+                      <Tooltip
+                        title="Total amount from approved vendor invoices (payables) that are not yet matched to payments. This represents money you need to pay to vendors. Independent from Cash In."
+                        trigger="hover"
+                        mouseEnterDelay={0.1}
+                      >
                         <InfoCircleOutlined className="text-text-tertiary cursor-help" />
                       </Tooltip>
                     </span>
@@ -372,7 +375,11 @@ export default function DashboardPage() {
                   title={
                     <span className="flex items-center gap-2">
                       Amount Received
-                      <Tooltip title="Total amount from payments matched to draft invoices (receivables). This represents money already received from customers.">
+                      <Tooltip
+                        title="Total amount from payments matched to draft invoices (receivables). This represents money already received from customers."
+                        trigger="hover"
+                        mouseEnterDelay={0.1}
+                      >
                         <InfoCircleOutlined className="text-text-tertiary cursor-help" />
                       </Tooltip>
                     </span>
@@ -400,7 +407,11 @@ export default function DashboardPage() {
                   title={
                     <span className="flex items-center gap-2">
                       Amount Paid
-                      <Tooltip title="Total amount from payments matched to approved invoices (payables). This represents money already paid to vendors.">
+                      <Tooltip
+                        title="Total amount from payments matched to approved invoices (payables). This represents money already paid to vendors."
+                        trigger="hover"
+                        mouseEnterDelay={0.1}
+                      >
                         <InfoCircleOutlined className="text-text-tertiary cursor-help" />
                       </Tooltip>
                     </span>
@@ -428,7 +439,11 @@ export default function DashboardPage() {
                   title={
                     <span className="flex items-center gap-2">
                       Overdue Invoices
-                      <Tooltip title="Number of invoices that have passed their due date and are not yet paid.">
+                      <Tooltip
+                        title="Number of invoices that have passed their due date and are not yet paid."
+                        trigger="hover"
+                        mouseEnterDelay={0.1}
+                      >
                         <InfoCircleOutlined className="text-text-tertiary cursor-help" />
                       </Tooltip>
                     </span>
@@ -444,7 +459,7 @@ export default function DashboardPage() {
                 />
               </Card>
             </div>
-            <div>
+            {/* <div>
               <Card className="hover-tint mx-2">
                 <Statistic
                   title={
@@ -466,61 +481,175 @@ export default function DashboardPage() {
                   }}
                 />
               </Card>
-            </div>
+            </div> */}
           </Carousel>
         </div>
 
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={12}>
-            <Card
-              title={
-                <span className="font-semibold text-text-primary">
-                  AR Aging
-                </span>
-              }
-              className="min-h-[300px]"
-            >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card
+            title={
+              <span className="font-semibold text-text-primary">AR Aging</span>
+            }
+            className="min-h-[300px]"
+          >
+            {arAgingLoading ? (
+              <div className="flex items-center justify-center h-[200px]">
+                <Spin size="large" />
+              </div>
+            ) : !arAging || arAging.every((bucket) => bucket.count === 0) ? (
               <div className="flex items-center justify-center h-[200px]">
                 <Empty
-                  description="No data available"
+                  description="No receivables to age"
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
+                >
+                  <p className="text-text-tertiary mt-2">
+                    Upload receivable invoices to see aging report
+                  </p>
+                </Empty>
               </div>
-            </Card>
-          </Col>
-          <Col xs={24} lg={12}>
-            <Card
-              title={
-                <span className="font-semibold text-text-primary">
-                  Recent Invoices
-                </span>
-              }
-              className="min-h-[300px]"
-            >
-              {!invoices || invoices.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-[200px]">
-                  <Empty
-                    description="No invoices yet"
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  >
-                    <p className="text-text-tertiary mt-2">
-                      Upload your first invoice to get started
-                    </p>
-                  </Empty>
+            ) : (
+              <div className="space-y-4">
+                {arAging.map((bucket) => {
+                  const totalAmount = arAging.reduce(
+                    (sum, b) => sum + b.amount,
+                    0
+                  );
+                  const percentage =
+                    totalAmount > 0
+                      ? ((bucket.amount / totalAmount) * 100).toFixed(1)
+                      : "0";
+                  const isOverdue = bucket.bucket !== "0-30";
+
+                  return (
+                    <div key={bucket.bucket} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-sm font-medium ${
+                              isOverdue ? "text-red-600" : "text-text-primary"
+                            }`}
+                          >
+                            {bucket.bucket} days
+                          </span>
+                          {isOverdue && (
+                            <Tag color="red" className="text-xs">
+                              Overdue
+                            </Tag>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold text-text-primary">
+                            {formatCurrency(
+                              bucket.amount,
+                              selectedWorkspace?.currency || "USD"
+                            )}
+                          </div>
+                          <div className="text-xs text-text-tertiary">
+                            {bucket.count} invoice
+                            {bucket.count !== 1 ? "s" : ""} • {percentage}%
+                          </div>
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            isOverdue
+                              ? "bg-red-500"
+                              : bucket.bucket === "0-30"
+                              ? "bg-green-500"
+                              : "bg-yellow-500"
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                <Divider />
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-sm font-semibold text-text-primary">
+                    Total Outstanding
+                  </span>
+                  <span className="text-lg font-bold text-text-primary">
+                    {formatCurrency(
+                      arAging.reduce((sum, bucket) => sum + bucket.amount, 0),
+                      selectedWorkspace?.currency || "USD"
+                    )}
+                  </span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {invoices.slice(0, 5).map((invoice) => (
-                    <div
+              </div>
+            )}
+          </Card>
+          <Card
+            title={
+              <span className="font-semibold text-text-primary">
+                Recent Invoices
+              </span>
+            }
+            className="min-h-[300px]"
+          >
+            {!invoices || invoices.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[200px]">
+                <Empty
+                  description="No invoices yet"
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                >
+                  <p className="text-text-tertiary mt-2">
+                    Upload your first invoice to get started
+                  </p>
+                </Empty>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {invoices.slice(0, 5).map((invoice) => {
+                  const isReceivable = invoice.status === "draft";
+                  const isPayable = invoice.status === "approved";
+                  const invoiceType = isReceivable
+                    ? "receivable"
+                    : isPayable
+                    ? "payable"
+                    : "unknown";
+                  const amountColor = isReceivable
+                    ? "text-green-600"
+                    : isPayable
+                    ? "text-red-600"
+                    : "text-text-primary";
+
+                  return (
+                    <button
                       key={invoice.id}
-                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-bg cursor-pointer"
+                      type="button"
+                      className="w-full flex items-center justify-between p-3 border-none rounded-lg bg-transparent shadow-md cursor-pointer focus:outline-none focus:ring-0 focus:ring-none focus:ring-offset-2 text-left"
                       onClick={() =>
                         router.push(`/invoices/review/${invoice.id}`)
                       }
                     >
                       <div className="flex-1">
-                        <div className="font-medium text-text-primary">
-                          {invoice.invoice_no}
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-text-primary">
+                            {invoice.invoice_no}
+                          </div>
+                          <Tag
+                            className={
+                              invoiceType === "receivable"
+                                ? "badge-paid"
+                                : invoiceType === "payable"
+                                ? "badge-overdue"
+                                : "badge-draft"
+                            }
+                            style={{
+                              border: "none",
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {invoiceType === "receivable"
+                              ? "Receivable"
+                              : invoiceType === "payable"
+                              ? "Payable"
+                              : "Unknown"}
+                          </Tag>
                         </div>
                         <div className="text-sm text-text-tertiary">
                           {invoice.vendor?.name || "Unknown"} •{" "}
@@ -528,7 +657,8 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-text-primary">
+                        <div className={`font-semibold ${amountColor}`}>
+                          {isReceivable ? "+" : isPayable ? "-" : ""}
                           {formatCurrency(
                             invoice.total,
                             invoice.currency ||
@@ -538,23 +668,23 @@ export default function DashboardPage() {
                         </div>
                         <ArrowRightOutlined className="text-text-tertiary ml-2" />
                       </div>
-                    </div>
-                  ))}
-                  {invoices.length > 5 && (
-                    <Button
-                      type="link"
-                      block
-                      onClick={() => router.push("/invoices")}
-                      className="mt-2"
-                    >
-                      View All Invoices
-                    </Button>
-                  )}
-                </div>
-              )}
-            </Card>
-          </Col>
-        </Row>
+                    </button>
+                  );
+                })}
+                {invoices.length > 5 && (
+                  <Button
+                    type="link"
+                    block
+                    onClick={() => router.push("/invoices")}
+                    className="mt-2"
+                  >
+                    View All Invoices
+                  </Button>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
 
       <CreateWorkspaceModal

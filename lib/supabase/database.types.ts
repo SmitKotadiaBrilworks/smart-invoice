@@ -28,6 +28,8 @@ export type AlertType =
   | "low_cash_risk";
 export type AlertChannel = "email" | "in_app";
 export type AlertStatus = "pending" | "sent" | "failed";
+export type InvoiceType = "receivable" | "payable";
+export type IntegrationProvider = "stripe" | "email" | "other";
 
 export interface Database {
   public: {
@@ -67,6 +69,7 @@ export interface Database {
           id: string;
           email: string;
           name: string | null;
+          profile_picture: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -74,6 +77,7 @@ export interface Database {
           id: string;
           email: string;
           name?: string | null;
+          profile_picture?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -81,6 +85,7 @@ export interface Database {
           id?: string;
           email?: string;
           name?: string | null;
+          profile_picture?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -269,6 +274,7 @@ export interface Database {
           created_by: string;
           created_at: string;
           updated_at: string;
+          invoice_type: InvoiceType;
         };
         Insert: {
           id?: string;
@@ -288,6 +294,7 @@ export interface Database {
           created_by: string;
           created_at?: string;
           updated_at?: string;
+          invoice_type: InvoiceType;
         };
         Update: {
           id?: string;
@@ -307,6 +314,7 @@ export interface Database {
           created_by?: string;
           created_at?: string;
           updated_at?: string;
+          invoice_type?: InvoiceType;
         };
         Relationships: [
           {
@@ -391,6 +399,7 @@ export interface Database {
           currency: string;
           received_at: string;
           status: PaymentStatus;
+          payment_direction: "received" | "paid" | null;
           raw: Json | null;
           created_at: string;
           updated_at: string;
@@ -407,6 +416,7 @@ export interface Database {
           currency?: string;
           received_at: string;
           status?: PaymentStatus;
+          payment_direction?: "received" | "paid" | null;
           raw?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -423,6 +433,7 @@ export interface Database {
           currency?: string;
           received_at?: string;
           status?: PaymentStatus;
+          payment_direction?: "received" | "paid" | null;
           raw?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -577,6 +588,52 @@ export interface Database {
           }
         ];
       };
+      workspace_integrations: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          provider: IntegrationProvider;
+          publishable_key: string | null;
+          secret_key_encrypted: string | null;
+          webhook_secret: string | null;
+          is_active: boolean;
+          metadata: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          provider: IntegrationProvider;
+          publishable_key?: string | null;
+          secret_key_encrypted?: string | null;
+          webhook_secret?: string | null;
+          is_active?: boolean;
+          metadata?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          provider?: IntegrationProvider;
+          publishable_key?: string | null;
+          secret_key_encrypted?: string | null;
+          webhook_secret?: string | null;
+          is_active?: boolean;
+          metadata?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workspace_integrations_workspace_id_fkey";
+            columns: ["workspace_id"];
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -594,6 +651,8 @@ export interface Database {
       alert_type: AlertType;
       alert_channel: AlertChannel;
       alert_status: AlertStatus;
+      invoice_type: InvoiceType;
+      integration_provider: IntegrationProvider;
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -659,3 +718,7 @@ export type AlertUpdate = TablesUpdate<"alerts">;
 export type AuditLog = Tables<"audit_logs">;
 export type AuditLogInsert = TablesInsert<"audit_logs">;
 export type AuditLogUpdate = TablesUpdate<"audit_logs">;
+
+export type WorkspaceIntegration = Tables<"workspace_integrations">;
+export type WorkspaceIntegrationInsert = TablesInsert<"workspace_integrations">;
+export type WorkspaceIntegrationUpdate = TablesUpdate<"workspace_integrations">;
