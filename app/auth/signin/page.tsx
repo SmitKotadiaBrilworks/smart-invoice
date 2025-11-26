@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { Form, Input, Button, Card, Typography } from "antd";
 import { message } from "@/lib/toast";
@@ -11,8 +10,6 @@ import Link from "next/link";
 const { Title } = Typography;
 
 export default function SignInPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { signIn } = useAuthContext();
   const [loading, setLoading] = useState(false);
 

@@ -1,9 +1,75 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Payment, PaymentMatch } from "@/types";
 import type {
+  InvoiceStatus,
   PaymentSource,
   PaymentStatus,
 } from "@/lib/supabase/database.types";
+
+// Helper function to update invoice status based on payment matches
+async function updateInvoiceStatusFromMatches(
+  workspaceId: string,
+  invoiceId: string
+) {
+  // Get invoice with all matches
+  const { data: invoice, error: invoiceError } = await supabaseAdmin
+    .from("invoices")
+    .select(
+      `
+      *,
+      matches:payment_matches(
+        *,
+        payment:payments(*)
+      )
+    `
+    )
+    .eq("id", invoiceId)
+    .eq("workspace_id", workspaceId)
+    .single();
+
+  if (invoiceError || !invoice) {
+    console.error("Error fetching invoice for status update:", invoiceError);
+    return;
+  }
+
+  // Calculate total matched amount
+  const totalMatched = (invoice.matches || []).reduce(
+    (sum: number, match: any) => {
+      if (match.payment && match.payment.status === "completed") {
+        return sum + (match.payment.amount || 0);
+      }
+      return sum;
+    },
+    0
+  );
+
+  const invoiceTotal = invoice.total || 0;
+  let newStatus: string = invoice.status;
+
+  // Update status based on matched amount
+  if (totalMatched >= invoiceTotal) {
+    newStatus = "paid";
+  } else if (totalMatched > 0) {
+    newStatus = "partially_paid";
+  }
+
+  // Only update if status changed
+  if (newStatus !== invoice.status) {
+    const { error: updateError } = await supabaseAdmin
+      .from("invoices")
+      .update({ status: newStatus as InvoiceStatus })
+      .eq("id", invoiceId)
+      .eq("workspace_id", workspaceId);
+
+    if (updateError) {
+      console.error("Error updating invoice status:", updateError);
+    } else {
+      console.log(
+        `Updated invoice ${invoiceId} status from ${invoice.status} to ${newStatus}`
+      );
+    }
+  }
+}
 
 export const paymentBackend = {
   // Get payments for a workspace
@@ -97,6 +163,24 @@ export const paymentBackend = {
     return data as Payment;
   },
 
+  // Update payment
+  updatePayment: async (
+    paymentId: string,
+    workspaceId: string,
+    updates: Partial<Payment>
+  ) => {
+    const { data, error } = await supabaseAdmin
+      .from("payments")
+      .update(updates)
+      .eq("id", paymentId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Payment;
+  },
+
   // Create payment match
   createMatch: async (
     workspaceId: string,
@@ -120,6 +204,10 @@ export const paymentBackend = {
       .single();
 
     if (error) throw error;
+
+    // Update invoice status based on payment matches
+    await updateInvoiceStatusFromMatches(workspaceId, invoiceId);
+
     return data as PaymentMatch;
   },
 
@@ -254,14 +342,15 @@ export const paymentBackend = {
 
     if (error) throw error;
 
-    // Calculate match scores
+    // Calculate match scores (stored as 0-1 decimal, converted to percentage for display)
     const matches = invoices.map((invoice) => {
       const amountDiff = Math.abs(invoice.total - payment.amount);
-      const score = 100 - (amountDiff / payment.amount) * 100;
+      const scorePercent = 100 - (amountDiff / payment.amount) * 100;
+      const score = Math.max(0, scorePercent) / 100; // Convert to 0-1 decimal format
 
       return {
         invoice,
-        score: Math.max(0, score),
+        score, // Store as 0-1 decimal (e.g., 0.9831 for 98.31%)
         reason: `Amount within ${((amountDiff / payment.amount) * 100).toFixed(
           1
         )}%`,

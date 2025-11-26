@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useInvoices } from "./useInvoices";
 import { usePayments } from "./usePayments";
-import type { DashboardKPIs } from "@/types";
+import type { DashboardKPIs, ARAgingBucket } from "@/types";
 
 export const useDashboardKPIs = (workspaceId: string) => {
   const { data: invoices, isLoading: invoicesLoading } = useInvoices(
@@ -147,5 +147,100 @@ export const useDashboardKPIs = (workspaceId: string) => {
   return {
     data: kpis,
     isLoading: invoicesLoading || paymentsLoading,
+  };
+};
+
+export const useARAging = (workspaceId: string) => {
+  const { data: invoices, isLoading } = useInvoices(workspaceId, {});
+
+  const arAging: ARAgingBucket[] = useMemo(() => {
+    if (!invoices || invoices.length === 0) {
+      return [
+        { bucket: "0-30", count: 0, amount: 0 },
+        { bucket: "31-60", count: 0, amount: 0 },
+        { bucket: "61-90", count: 0, amount: 0 },
+        { bucket: "90+", count: 0, amount: 0 },
+      ];
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Filter for receivable invoices that are not fully paid
+    const receivableInvoices = invoices.filter((inv) => {
+      const isReceivable =
+        inv.invoice_type === "receivable" ||
+        (!inv.invoice_type && inv.status === "draft");
+
+      // Only include unpaid or partially paid receivables
+      const isUnpaid = inv.status !== "paid";
+
+      // Calculate outstanding amount (total - matched payments)
+      const matchedAmount =
+        inv.matches?.reduce(
+          (sum, match) => sum + (match.payment?.amount || 0),
+          0
+        ) || 0;
+      const outstandingAmount = inv.total - matchedAmount;
+
+      return isReceivable && isUnpaid && outstandingAmount > 0;
+    });
+
+    // Initialize buckets
+    const buckets: { [key: string]: { count: number; amount: number } } = {
+      "0-30": { count: 0, amount: 0 },
+      "31-60": { count: 0, amount: 0 },
+      "61-90": { count: 0, amount: 0 },
+      "90+": { count: 0, amount: 0 },
+    };
+
+    // Calculate days outstanding for each invoice
+    receivableInvoices.forEach((inv) => {
+      const dueDate = new Date(inv.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+
+      // Calculate days past due (negative if not yet due)
+      const daysPastDue = Math.floor(
+        (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Calculate outstanding amount
+      const matchedAmount =
+        inv.matches?.reduce(
+          (sum, match) => sum + (match.payment?.amount || 0),
+          0
+        ) || 0;
+      const outstandingAmount = inv.total - matchedAmount;
+
+      // Categorize into buckets based on days past due
+      let bucket: "0-30" | "31-60" | "61-90" | "90+";
+      if (daysPastDue <= 0) {
+        // Not yet due - count as 0-30
+        bucket = "0-30";
+      } else if (daysPastDue <= 30) {
+        bucket = "0-30";
+      } else if (daysPastDue <= 60) {
+        bucket = "31-60";
+      } else if (daysPastDue <= 90) {
+        bucket = "61-90";
+      } else {
+        bucket = "90+";
+      }
+
+      buckets[bucket].count += 1;
+      buckets[bucket].amount += outstandingAmount;
+    });
+
+    return [
+      { bucket: "0-30", ...buckets["0-30"] },
+      { bucket: "31-60", ...buckets["31-60"] },
+      { bucket: "61-90", ...buckets["61-90"] },
+      { bucket: "90+", ...buckets["90+"] },
+    ];
+  }, [invoices]);
+
+  return {
+    data: arAging,
+    isLoading,
   };
 };

@@ -120,3 +120,52 @@ export const useCreateWorkspace = () => {
     },
   });
 };
+
+export const useUpdateWorkspace = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      workspaceId: string;
+      updates: {
+        name?: string;
+        currency?: string;
+        timezone?: string;
+        fiscal_year?: number;
+      };
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Verify user is a member of the workspace
+      const { data: member, error: memberError } = await supabase
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", payload.workspaceId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (memberError || !member) {
+        throw new Error("You don't have permission to update this workspace");
+      }
+
+      // Update workspace
+      const { data: workspace, error: workspaceError } = await supabase
+        .from("workspaces")
+        .update(payload.updates)
+        .eq("id", payload.workspaceId)
+        .select()
+        .single();
+
+      if (workspaceError) throw workspaceError;
+
+      return workspace as Workspace;
+    },
+    onSuccess: () => {
+      // Invalidate all workspace-related queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+};

@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/contexts/AuthContext";
 import {
   Card,
   Typography,
-  Spin,
   Form,
   Input,
   Button,
@@ -15,6 +13,7 @@ import {
   Divider,
   Row,
   Col,
+  Upload,
 } from "antd";
 import { message } from "@/lib/toast";
 import {
@@ -23,30 +22,74 @@ import {
   SaveOutlined,
   LockOutlined,
   EditOutlined,
+  UploadOutlined,
+  DeleteOutlined,
+  LoadingOutlined,
 } from "@ant-design/icons";
 import { supabase } from "@/lib/supabase/client";
 import LoadingPage from "@/components/common/LoadingPage";
+import type { UploadProps } from "antd";
 
 const { Title, Text } = Typography;
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthContext();
+  const { user, isLoading: authLoading } = useAuthContext();
   const [profileForm] = Form.useForm();
   const [passwordForm] = Form.useForm();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
 
   // No need for redirect - middleware handles it
 
+  // Fetch user profile with profile picture
   useEffect(() => {
-    if (user) {
-      profileForm.setFieldsValue({
-        email: user.email,
-        name: user.user_metadata?.name || user.user_metadata?.full_name || "",
-      });
-    }
+    const fetchUserProfile = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("user_profiles")
+          .select("profile_picture, name")
+          .eq("id", user.id)
+          .single();
+
+        if (error && error.code !== "PGRST116") {
+          // PGRST116 = no rows returned, which is okay
+          console.error("Error fetching profile:", error);
+        }
+
+        if (data && !error) {
+          const picUrl = (data as any).profile_picture;
+          // Add cache-busting parameter if profile picture exists
+          setProfilePicture(picUrl ? `${picUrl}?t=${Date.now()}` : null);
+          profileForm.setFieldsValue({
+            email: user.email,
+            name:
+              (data as any).name ||
+              user.user_metadata?.name ||
+              user.user_metadata?.full_name ||
+              "",
+          });
+        } else {
+          profileForm.setFieldsValue({
+            email: user.email,
+            name:
+              user.user_metadata?.name || user.user_metadata?.full_name || "",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+        profileForm.setFieldsValue({
+          email: user.email,
+          name: user.user_metadata?.name || user.user_metadata?.full_name || "",
+        });
+      }
+    };
+
+    fetchUserProfile();
   }, [user, profileForm]);
 
   const handleProfileUpdate = async (values: any) => {
@@ -85,6 +128,99 @@ export default function ProfilePage() {
       message.error(error.message || "Failed to change password");
     } finally {
       setIsChangingPassword(false);
+    }
+  };
+
+  const handleProfilePictureUpload: UploadProps["customRequest"] = async ({
+    file,
+    onSuccess,
+    onError,
+  }) => {
+    const fileObj = file as File;
+
+    // Validate file size (3MB)
+    if (fileObj.size > 3 * 1024 * 1024) {
+      message.error("File size must be less than 3MB");
+      onError?.(new Error("File size exceeds 3MB"));
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(fileObj.type)) {
+      message.error("Only JPG, PNG, and WEBP images are allowed");
+      onError?.(new Error("Invalid file type"));
+      return;
+    }
+
+    setUploadingPicture(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", fileObj);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch("/api/profile/picture", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to upload profile picture");
+      }
+
+      const data = await response.json();
+      // Add cache-busting parameter to force image reload
+      const profilePicUrl = data.profile_picture
+        ? `${data.profile_picture}?t=${Date.now()}`
+        : null;
+      setProfilePicture(profilePicUrl);
+      message.success("Profile picture updated successfully");
+      onSuccess?.(data);
+    } catch (error: any) {
+      message.error(error.message || "Failed to upload profile picture");
+      onError?.(error);
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch("/api/profile/picture", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to remove profile picture");
+      }
+
+      setProfilePicture(null);
+      message.success("Profile picture removed successfully");
+    } catch (error: any) {
+      message.error(error.message || "Failed to remove profile picture");
     }
   };
 
@@ -145,22 +281,80 @@ export default function ProfilePage() {
               onFinish={handleProfileUpdate}
               disabled={!isEditing}
             >
-              <Form.Item label="Avatar" className="mb-6">
+              <Form.Item name={"avatar"} className="mb-6">
                 <div className="flex items-center gap-4">
-                  <Avatar
-                    size={80}
-                    icon={<UserOutlined />}
-                    className="bg-primary"
-                  >
-                    {userInitials}
-                  </Avatar>
-                  <div>
-                    <Text className="text-text-secondary text-sm block mb-1">
+                  <div className="relative">
+                    <Avatar
+                      key={profilePicture || "no-pic"}
+                      size={80}
+                      src={profilePicture || undefined}
+                      icon={<UserOutlined />}
+                      className={`${
+                        profilePicture ? "bg-transparent" : "bg-primary"
+                      }`}
+                    >
+                      {!profilePicture && userInitials}
+                    </Avatar>
+                    {uploadingPicture && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                        <LoadingOutlined className="text-white text-2xl" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <Text className="text-text-secondary text-sm block">
                       Profile picture
                     </Text>
-                    <Text className="text-text-tertiary text-xs">
-                      Avatar updates coming soon
-                    </Text>
+                    {isEditing ? (
+                      <div className="mt-2 flex flex-col gap-2">
+                        <Space direction="horizontal" size="small">
+                          <Upload
+                            customRequest={handleProfilePictureUpload}
+                            showUploadList={false}
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            beforeUpload={(file) => {
+                              // Validate file size
+                              if (file.size > 3 * 1024 * 1024) {
+                                message.error(
+                                  "File size must be less than 3MB"
+                                );
+                                return false;
+                              }
+                              return true;
+                            }}
+                          >
+                            <Button
+                              icon={<UploadOutlined />}
+                              size="small"
+                              loading={uploadingPicture}
+                              disabled={uploadingPicture}
+                            >
+                              Upload
+                            </Button>
+                          </Upload>
+                          {profilePicture && (
+                            <Button
+                              danger
+                              size="small"
+                              icon={<DeleteOutlined />}
+                              onClick={handleRemoveProfilePicture}
+                              disabled={uploadingPicture}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </Space>
+                        <Text className="text-text-tertiary text-xs block">
+                          JPG, PNG or WEBP. Max size 3MB
+                        </Text>
+                      </div>
+                    ) : (
+                      <Text className="text-text-tertiary text-xs">
+                        {profilePicture
+                          ? "Click Edit to change profile picture"
+                          : "No profile picture set"}
+                      </Text>
+                    )}
                   </div>
                 </div>
               </Form.Item>

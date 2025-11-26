@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMediaQuery } from "react-responsive";
 import {
   Modal,
   Upload,
@@ -40,6 +41,7 @@ export default function UploadInvoiceModal({
   workspaceId,
   onSuccess,
 }: UploadInvoiceModalProps) {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [extraction, setExtraction] = useState<InvoiceExtraction | null>(null);
@@ -116,7 +118,7 @@ export default function UploadInvoiceModal({
       message.success("Invoice extracted successfully!");
       return extractionData;
     } catch (error: any) {
-      message.error(error.message || "Failed to process invoice");
+      // Error is already handled by global interceptor
       setCurrentStep(0);
       throw error;
     } finally {
@@ -168,7 +170,8 @@ export default function UploadInvoiceModal({
           );
         }
       } else {
-        message.error(error.message || "Failed to save invoice");
+        // Error is already handled by global interceptor, just re-throw
+        throw error;
       }
     } finally {
       setSaving(false);
@@ -257,8 +260,16 @@ export default function UploadInvoiceModal({
       open={open}
       onCancel={handleCancel}
       footer={null}
-      width={800}
+      centered
+      width={isMobile ? "90%" : 800}
       destroyOnClose
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       <Steps current={currentStep} className="mb-6">
         <Step title="Upload" description="Select invoice file" />

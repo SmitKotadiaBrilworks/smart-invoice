@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useMediaQuery } from "react-responsive";
 import {
   Modal,
   Button,
@@ -48,6 +49,7 @@ export default function PaymentMatchModal({
   payment,
   workspaceId,
 }: PaymentMatchModalProps) {
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
     null
   );
@@ -69,10 +71,12 @@ export default function PaymentMatchModal({
   useEffect(() => {
     if (isMatched && existingMatch) {
       setSelectedInvoiceId(existingMatch.invoice_id);
+      // Score is stored as 0-1 decimal, convert to percentage for display
       setMatchScore(existingMatch.score * 100);
       setMatchReason(existingMatch.reason || "");
     } else if (suggestions && suggestions.length > 0) {
       setSelectedInvoiceId(suggestions[0].invoice.id);
+      // Suggestions now return scores as 0-1 decimal, convert to percentage for display
       setMatchScore(suggestions[0].score * 100);
       setMatchReason(suggestions[0].reason || "");
     }
@@ -115,7 +119,8 @@ export default function PaymentMatchModal({
       onSuccess?.();
       onCancel();
     } catch (error: any) {
-      message.error(error.message || "Failed to match payment");
+      // Error is already handled by global interceptor, just re-throw
+      throw error;
     }
   };
 
@@ -139,7 +144,8 @@ export default function PaymentMatchModal({
           onSuccess?.();
           onCancel();
         } catch (error: any) {
-          message.error(error.message || "Failed to remove match");
+          // Error is already handled by global interceptor, just re-throw
+          throw error;
         }
       },
     });
@@ -163,7 +169,15 @@ export default function PaymentMatchModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
-      width={700}
+      centered
+      width={isMobile ? "90%" : 700}
+      styles={{
+        body: {
+          maxHeight: "70vh",
+          overflowY: "auto",
+          padding: "4px",
+        },
+      }}
     >
       <div className="space-y-4">
         <Card className="bg-bg">

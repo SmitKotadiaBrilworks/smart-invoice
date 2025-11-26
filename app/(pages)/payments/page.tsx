@@ -1,23 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useMediaQuery } from "react-responsive";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import {
   usePayments,
   useUnmatchedPayments,
   useMatchedPayments,
-  useCreatePayment,
-  usePaymentSuggestions,
-  useCreatePaymentMatch,
-  useUpdatePaymentMatch,
-  useDeletePaymentMatch,
   useDeletePayment,
 } from "@/hooks/usePayments";
 import PaymentModal from "@/components/payments/PaymentModal";
 import PaymentMatchModal from "@/components/payments/PaymentMatchModal";
 import PaymentDetailModal from "@/components/payments/PaymentDetailModal";
+import PaymentCard from "@/components/payments/PaymentCard";
 import LoadingPage from "@/components/common/LoadingPage";
 
 import {
@@ -26,7 +22,6 @@ import {
   Card,
   Typography,
   Tag,
-  Space,
   Spin,
   Empty,
   Tabs,
@@ -37,7 +32,6 @@ import {
 import type { MenuProps } from "antd";
 import {
   PlusOutlined,
-  DollarOutlined,
   LinkOutlined,
   DeleteOutlined,
   EyeOutlined,
@@ -50,9 +44,9 @@ import { format } from "date-fns";
 const { Title } = Typography;
 
 export default function PaymentsPage() {
-  const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthContext();
+  const { user, isLoading: authLoading } = useAuthContext();
   const { selectedWorkspace } = useWorkspaceContext();
+  const isMobile = useMediaQuery({ maxWidth: 768 }); // md breakpoint
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [matchingPayment, setMatchingPayment] = useState<Payment | null>(null);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
@@ -66,7 +60,6 @@ export default function PaymentsPage() {
   const { data: matchedPayments, isLoading: matchedLoading } =
     useMatchedPayments(selectedWorkspace?.id || "");
 
-  const createPaymentMatch = useCreatePaymentMatch();
   const deletePayment = useDeletePayment();
 
   // No need for redirect - middleware handles it
@@ -249,132 +242,157 @@ export default function PaymentsPage() {
     },
   ];
 
+  const renderPaymentContent = (
+    paymentList: Payment[] | undefined,
+    loading: boolean,
+    totalLabel: string
+  ) => {
+    if (loading) {
+      return (
+        <div className="flex justify-center py-12">
+          <Spin size="large" />
+        </div>
+      );
+    }
+
+    if (!paymentList || paymentList.length === 0) {
+      return (
+        <div className="py-12">
+          <Empty
+            description={`No ${totalLabel.toLowerCase()}`}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </div>
+      );
+    }
+
+    if (isMobile) {
+      /* Mobile Card View */
+      return (
+        <div>
+          {paymentList.map((payment) => (
+            <PaymentCard
+              key={payment.id}
+              payment={payment}
+              workspaceId={selectedWorkspace?.id || ""}
+              onViewDetails={() => setViewingPayment(payment)}
+              onMatch={() => setMatchingPayment(payment)}
+            />
+          ))}
+          {/* Simple pagination info for mobile */}
+          <div className="text-center mt-4 text-sm text-text-tertiary">
+            Showing {paymentList.length} payment
+            {paymentList.length !== 1 ? "s" : ""}
+          </div>
+        </div>
+      );
+    }
+
+    /* Desktop Table View */
+    return (
+      <div className="overflow-auto">
+        <Table
+          columns={paymentColumns}
+          dataSource={paymentList}
+          rowKey="id"
+          pagination={{
+            pageSize: 5,
+            showSizeChanger: false,
+            showTotal: (total) => `Total ${total} ${totalLabel}`,
+          }}
+          scroll={{ x: "max-content" }}
+        />
+      </div>
+    );
+  };
+
   const tabItems = [
     {
       key: "all",
       label: "All Payments",
-      children: (
-        <div className="overflow-x-auto">
-          <Table
-            columns={paymentColumns}
-            dataSource={payments}
-            rowKey="id"
-            pagination={{
-              pageSize: 10,
-              showSizeChanger: true,
-              showTotal: (total) => `Total ${total} payments`,
-            }}
-            loading={paymentsLoading}
-            scroll={{ x: "max-content" }}
-          />
-        </div>
-      ),
+      children: renderPaymentContent(payments, paymentsLoading, "payments"),
     },
     {
       key: "matched",
       label: "Matched",
-      children: (
-        <div className="overflow-x-auto">
-          <Table
-            columns={paymentColumns}
-            dataSource={matchedPayments}
-            rowKey="id"
-            pagination={{
-              pageSize: 10,
-              showSizeChanger: true,
-              showTotal: (total) => `Total ${total} matched payments`,
-            }}
-            loading={matchedLoading}
-            scroll={{ x: "max-content" }}
-          />
-        </div>
+      children: renderPaymentContent(
+        matchedPayments,
+        matchedLoading,
+        "matched payments"
       ),
     },
     {
       key: "unmatched",
       label: "Unmatched",
-      children: (
-        <div className="overflow-x-auto">
-          <Table
-            columns={paymentColumns}
-            dataSource={unmatchedPayments}
-            rowKey="id"
-            pagination={{
-              pageSize: 10,
-              showSizeChanger: true,
-              showTotal: (total) => `Total ${total} unmatched payments`,
-            }}
-            loading={unmatchedLoading}
-            scroll={{ x: "max-content" }}
-          />
-        </div>
+      children: renderPaymentContent(
+        unmatchedPayments,
+        unmatchedLoading,
+        "unmatched payments"
       ),
     },
   ];
 
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <Title level={2} className="!mb-0 !font-bold !text-text-primary">
-            Payments
-          </Title>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setPaymentModalOpen(true);
-            }}
-            className="w-full sm:w-auto"
-          >
-            Add Payment
-          </Button>
-        </div>
-
-        <Card className="card-shadow">
-          {!payments || payments.length === 0 ? (
-            <div className="py-12">
-              <Empty
-                description="No payments yet"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              >
-                <p className="text-text-tertiary mb-4 mt-4">
-                  Connect Stripe or add manual payments to get started
-                </p>
-              </Empty>
-            </div>
-          ) : (
-            <Tabs items={tabItems} className="overflow-x-auto" />
-          )}
-        </Card>
-
-        {selectedWorkspace && (
-          <>
-            <PaymentModal
-              open={paymentModalOpen}
-              onCancel={() => setPaymentModalOpen(false)}
-              workspaceId={selectedWorkspace.id}
-              onSuccess={() => {
-                setPaymentModalOpen(false);
-              }}
-            />
-            <PaymentMatchModal
-              open={!!matchingPayment}
-              onCancel={() => setMatchingPayment(null)}
-              payment={matchingPayment}
-              workspaceId={selectedWorkspace.id}
-              onSuccess={() => {
-                setMatchingPayment(null);
-              }}
-            />
-            <PaymentDetailModal
-              open={!!viewingPayment}
-              onCancel={() => setViewingPayment(null)}
-              payment={viewingPayment}
-            />
-          </>
-        )}
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <Title level={2} className="!mb-0 !font-bold !text-text-primary">
+          Payments
+        </Title>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setPaymentModalOpen(true);
+          }}
+          className="w-full sm:w-auto"
+        >
+          Add Payment
+        </Button>
       </div>
-    </>
+
+      {!payments || payments.length === 0 ? (
+        <Card className="card-shadow" bodyStyle={{ padding: "16px" }}>
+          <div className="py-12">
+            <Empty
+              description="No payments yet"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              <p className="text-text-tertiary mb-4 mt-4">
+                Connect Stripe or add manual payments to get started
+              </p>
+            </Empty>
+          </div>
+        </Card>
+      ) : (
+        <Tabs items={tabItems} className="overflow-x-auto" />
+      )}
+
+      {selectedWorkspace && (
+        <>
+          <PaymentModal
+            open={paymentModalOpen}
+            onCancel={() => setPaymentModalOpen(false)}
+            workspaceId={selectedWorkspace.id}
+            onSuccess={() => {
+              setPaymentModalOpen(false);
+            }}
+          />
+          <PaymentMatchModal
+            open={!!matchingPayment}
+            onCancel={() => setMatchingPayment(null)}
+            payment={matchingPayment}
+            workspaceId={selectedWorkspace.id}
+            onSuccess={() => {
+              setMatchingPayment(null);
+            }}
+          />
+          <PaymentDetailModal
+            open={!!viewingPayment}
+            onCancel={() => setViewingPayment(null)}
+            payment={viewingPayment}
+          />
+        </>
+      )}
+    </div>
   );
 }
