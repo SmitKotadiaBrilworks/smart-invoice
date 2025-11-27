@@ -362,7 +362,7 @@ export default function InvoiceReviewPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Button
               type="text"
@@ -375,7 +375,7 @@ export default function InvoiceReviewPage() {
               Parse Review
             </Title>
           </div>
-          <Space>
+          <Space wrap className="w-full md:w-auto justify-start md:justify-end">
             <ConfidenceBadge confidence={confidence} />
             <Text type="secondary" className="text-text-tertiary">
               Confidence
@@ -512,7 +512,7 @@ export default function InvoiceReviewPage() {
               }
               className="h-full"
             >
-              <div className="h-[600px] bg-bg border border-border rounded-lg overflow-hidden">
+              <div className="h-[400px] md:h-[600px] bg-bg border border-border rounded-lg overflow-hidden">
                 {invoice.source === "upload" ? (
                   <InvoicePreviewFrame
                     invoiceId={invoice.id}
@@ -564,7 +564,7 @@ export default function InvoiceReviewPage() {
                 className="space-y-4"
               >
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={<span className="text-text-primary">Vendor</span>}
                       name="vendor_id"
@@ -586,13 +586,14 @@ export default function InvoiceReviewPage() {
                           value: vendor.id,
                         }))}
                         style={{
+                          width: "100%",
                           backgroundColor:
                             confidence < 0.7 ? "#fef9c3" : undefined,
                         }}
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">
@@ -609,6 +610,7 @@ export default function InvoiceReviewPage() {
                     >
                       <Input
                         style={{
+                          width: "100%",
                           backgroundColor:
                             confidence < 0.7 ? "#fef9c3" : undefined,
                         }}
@@ -619,7 +621,7 @@ export default function InvoiceReviewPage() {
                 </Row>
 
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">Issue date</span>
@@ -629,10 +631,10 @@ export default function InvoiceReviewPage() {
                         { required: true, message: "Issue date is required" },
                       ]}
                     >
-                      <Input type="date" />
+                      <Input type="date" style={{ width: "100%" }} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">Due date</span>
@@ -642,13 +644,13 @@ export default function InvoiceReviewPage() {
                         { required: true, message: "Due date is required" },
                       ]}
                     >
-                      <Input type="date" />
+                      <Input type="date" style={{ width: "100%" }} />
                     </Form.Item>
                   </Col>
                 </Row>
 
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">Currency</span>
@@ -667,13 +669,14 @@ export default function InvoiceReviewPage() {
                             .includes(input.toLowerCase())
                         }
                         style={{
+                          width: "100%",
                           backgroundColor:
                             confidence < 0.7 ? "#fef9c3" : undefined,
                         }}
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">Invoice Type</span>
@@ -695,20 +698,24 @@ export default function InvoiceReviewPage() {
                             value: "payable",
                           },
                         ]}
+                        style={{ width: "100%" }}
                       />
                     </Form.Item>
                   </Col>
                 </Row>
 
                 <Row gutter={16}>
-                  <Col span={12}>
+                  <Col xs={24} md={12}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">PO number</span>
                       }
                       name="po_number"
                     >
-                      <Input placeholder="PO number (optional)" />
+                      <Input
+                        placeholder="PO number (optional)"
+                        style={{ width: "100%" }}
+                      />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -716,7 +723,7 @@ export default function InvoiceReviewPage() {
                 <Divider />
 
                 <Row gutter={16}>
-                  <Col span={8}>
+                  <Col xs={24} md={8}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">Subtotal</span>
@@ -734,7 +741,7 @@ export default function InvoiceReviewPage() {
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={8}>
+                  <Col xs={24} md={8}>
                     <Form.Item
                       label={
                         <span className="text-text-primary">Tax total</span>
@@ -752,7 +759,7 @@ export default function InvoiceReviewPage() {
                       />
                     </Form.Item>
                   </Col>
-                  <Col span={8}>
+                  <Col xs={24} md={8}>
                     <Form.Item
                       label={
                         <span className="text-text-primary font-semibold">
@@ -780,6 +787,7 @@ export default function InvoiceReviewPage() {
                   <Input.TextArea
                     rows={2}
                     placeholder="Payment terms (optional)"
+                    style={{ width: "100%" }}
                   />
                 </Form.Item>
 
@@ -795,6 +803,7 @@ export default function InvoiceReviewPage() {
                     rowKey="id"
                     pagination={false}
                     size="small"
+                    scroll={{ x: "max-content" }}
                   />
                 </div>
 
@@ -807,8 +816,11 @@ export default function InvoiceReviewPage() {
                   />
                 )}
 
-                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border sticky bottom-0 bg-white z-10">
-                  <Button onClick={() => router.push("/invoices")}>
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-6 pt-4 border-t border-border sticky bottom-0 bg-white z-10">
+                  <Button
+                    onClick={() => router.push("/invoices")}
+                    className="w-full sm:w-auto"
+                  >
                     Cancel
                   </Button>
                   <Button
@@ -816,6 +828,7 @@ export default function InvoiceReviewPage() {
                     icon={<SaveOutlined />}
                     onClick={handleSave}
                     loading={updateInvoice.isPending}
+                    className="w-full sm:w-auto"
                   >
                     Save Changes
                   </Button>

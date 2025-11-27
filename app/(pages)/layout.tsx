@@ -116,15 +116,15 @@ export default function PagesLayout({
 
   return (
     <SidebarProvider>
-      <Layout className="h-screen flex w-screen">
+      <Layout className="flex">
         <AppSidebar
           filteredItems={filteredItems}
           filteredFooterItems={filteredFooterItems}
         />
         <SidebarInset>
           <HeaderComponent />
-          <main className="p-4 md:p-10 bg-bg h-[calc(100vh-64px)]">
-            <div className="mx-auto h-full w-full">{children}</div>
+          <main className="p-4 md:p-10 bg-bg max-h-[calc(100vh-64px)] overflow-y-auto">
+            <div className="mx-auto h-available w-available">{children}</div>
           </main>
         </SidebarInset>
       </Layout>

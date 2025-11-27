@@ -6,6 +6,7 @@ import { useMediaQuery } from "react-responsive";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useInvoices, useDeleteInvoice } from "@/hooks/useInvoices";
+import { useVendors } from "@/hooks/useVendors";
 import UploadInvoiceModal from "@/components/invoices/UploadInvoiceModal";
 import InvoiceCard from "@/components/invoices/InvoiceCard";
 import LoadingPage from "@/components/common/LoadingPage";
@@ -30,6 +31,7 @@ import {
   ReloadOutlined,
   DeleteOutlined,
   MoreOutlined,
+  UserAddOutlined,
 } from "@ant-design/icons";
 import type { Invoice } from "@/types";
 import { formatCurrency } from "@/lib/constants/currencies";
@@ -58,6 +60,10 @@ export default function InvoicesPage() {
     status: statusFilter as any,
     invoice_type: typeFilter,
   });
+
+  const { data: vendors, isLoading: vendorsLoading } = useVendors(
+    selectedWorkspace?.id || ""
+  );
 
   const deleteInvoice = useDeleteInvoice();
 
@@ -285,6 +291,8 @@ export default function InvoicesPage() {
     },
   ];
 
+  const hasVendors = vendors && vendors.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -329,7 +337,20 @@ export default function InvoicesPage() {
               <Button
                 type="primary"
                 icon={<UploadOutlined />}
-                onClick={() => setUploadModalOpen(true)}
+                onClick={() => {
+                  if (!hasVendors && !vendorsLoading) {
+                    Modal.confirm({
+                      title: "No Vendors Found",
+                      content:
+                        "You need to create a vendor before you can upload an invoice.",
+                      okText: "Create Vendor",
+                      cancelText: "Cancel",
+                      onOk: () => router.push("/vendors"),
+                    });
+                  } else {
+                    setUploadModalOpen(true);
+                  }
+                }}
                 className="w-full sm:w-auto h-10"
               >
                 Upload Invoice
@@ -352,29 +373,49 @@ export default function InvoicesPage() {
         className="card-shadow"
         bodyStyle={{ padding: isMobile ? "0px" : "16px" }}
       >
-        {invoicesLoading ? (
+        {invoicesLoading || vendorsLoading ? (
           <div className="flex justify-center py-12">
             <Spin size="large" />
           </div>
         ) : !invoices || invoices.length === 0 ? (
           <div className="py-12">
-            <Empty
-              description="No invoices yet"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            >
-              <p className="text-text-tertiary mb-4 mt-4">
-                Drag & drop your first invoice to begin AI extraction
-              </p>
-              <Button
-                type="primary"
-                size="large"
-                icon={<UploadOutlined />}
-                onClick={() => setUploadModalOpen(true)}
-                className="h-12 px-8"
+            {!hasVendors ? (
+              <Empty
+                description="No vendors found"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
               >
-                Upload Your First Invoice
-              </Button>
-            </Empty>
+                <p className="text-text-tertiary mb-4 mt-4">
+                  You need to add a vendor before you can create invoices.
+                </p>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<UserAddOutlined />}
+                  onClick={() => router.push("/vendors")}
+                  className="h-12 px-8"
+                >
+                  Add Your First Vendor
+                </Button>
+              </Empty>
+            ) : (
+              <Empty
+                description="No invoices yet"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              >
+                <p className="text-text-tertiary mb-4 mt-4">
+                  Drag & drop your first invoice to begin AI extraction
+                </p>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<UploadOutlined />}
+                  onClick={() => setUploadModalOpen(true)}
+                  className="h-12 px-8"
+                >
+                  Upload Your First Invoice
+                </Button>
+              </Empty>
+            )}
           </div>
         ) : isMobile ? (
           /* Mobile Card View */
