@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useCreatePaymentMatch, useCreatePayment } from "@/hooks/usePayments";
 import { useMediaQuery } from "react-responsive";
-import { Modal, Form, Input, InputNumber, Button, Select } from "antd";
+import { Modal, Form, Input, InputNumber, Button, Select, Alert } from "antd";
 import { message } from "@/lib/toast";
-import { useCreatePayment } from "@/hooks/usePayments";
 import { CURRENCY_OPTIONS } from "@/lib/constants/currencies";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 
@@ -13,6 +13,16 @@ interface PaymentModalProps {
   onCancel: () => void;
   onSuccess?: () => void;
   workspaceId: string;
+  matchedInvoice?: {
+    id: string;
+    invoice_no: string;
+    total: number;
+    currency?: string;
+    vendor?: {
+      name?: string;
+    };
+    invoice_type?: "receivable" | "payable";
+  } | null; // Pre-filled invoice data from matching
 }
 
 export default function PaymentModal({
@@ -20,12 +30,40 @@ export default function PaymentModal({
   onCancel,
   onSuccess,
   workspaceId,
+  matchedInvoice,
 }: PaymentModalProps) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const [form] = Form.useForm();
   const createPayment = useCreatePayment();
+  const createPaymentMatch = useCreatePaymentMatch();
   const { selectedWorkspace } = useWorkspaceContext();
   const [loading, setLoading] = useState(false);
+
+  // Pre-fill form when matched invoice is provided
+  useEffect(() => {
+    if (matchedInvoice && open) {
+      form.setFieldsValue({
+        customer: matchedInvoice.vendor?.name || "",
+        amount: matchedInvoice.total,
+        currency:
+          matchedInvoice.currency || selectedWorkspace?.currency || "USD",
+        invoice_id: matchedInvoice.id,
+        payment_direction:
+          matchedInvoice.invoice_type === "receivable" ? "received" : "paid",
+        received_at: new Date().toISOString().split("T")[0],
+        fee: 0,
+        net: matchedInvoice.total,
+      });
+    } else if (open && !matchedInvoice) {
+      // Reset form if no matched invoice
+      form.resetFields();
+      form.setFieldsValue({
+        currency: selectedWorkspace?.currency || "USD",
+        received_at: new Date().toISOString().split("T")[0],
+        fee: 0,
+      });
+    }
+  }, [matchedInvoice, open, form, selectedWorkspace]);
 
   // Auto-calculate net amount when amount or fee changes
   const handleAmountChange = () => {
@@ -38,7 +76,12 @@ export default function PaymentModal({
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
-      await createPayment.mutateAsync({
+      if (!matchedInvoice) {
+        message.error("Please match an invoice first");
+        return;
+      }
+
+      const payment = await createPayment.mutateAsync({
         workspace_id: workspaceId,
         source: "manual",
         amount: values.amount,
@@ -51,6 +94,13 @@ export default function PaymentModal({
         net: values.net || values.amount,
         status: "completed",
         payment_direction: values.payment_direction || "received",
+      });
+
+      // Always create match since invoice was matched
+      await createPaymentMatch.mutateAsync({
+        workspace_id: workspaceId,
+        invoice_id: matchedInvoice.id,
+        payment_id: payment.id,
       });
       message.success("Payment added successfully!");
       form.resetFields();
@@ -99,6 +149,7 @@ export default function PaymentModal({
           received_at: new Date().toISOString().split("T")[0],
           fee: 0,
         }}
+        key={matchedInvoice?.id || "new"} // Reset form when matched invoice changes
         size="large"
       >
         <Form.Item
@@ -124,6 +175,17 @@ export default function PaymentModal({
             onChange={handleAmountChange}
           />
         </Form.Item>
+        {matchedInvoice && (
+          <Alert
+            message={`Matched Invoice: ${matchedInvoice.invoice_no}`}
+            description={`Amount: ${matchedInvoice.total} ${
+              matchedInvoice.currency || "USD"
+            }`}
+            type="success"
+            showIcon
+            className="mb-4"
+          />
+        )}
 
         <Form.Item
           label={
@@ -205,6 +267,7 @@ export default function PaymentModal({
               type="primary"
               htmlType="submit"
               loading={loading}
+              disabled={!matchedInvoice}
               size="large"
               className="px-8 font-medium"
             >

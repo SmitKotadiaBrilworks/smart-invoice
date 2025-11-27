@@ -48,6 +48,7 @@ import ConfidenceBadge from "@/components/ui/ConfidenceBadge";
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/constants/currencies";
 import type { Invoice, InvoiceLine } from "@/types";
 import { format } from "date-fns";
+import { calculateInvoicePaymentAmounts } from "@/lib/utils/invoice-payments";
 import { useCreatePaymentLink } from "@/hooks/useStripe";
 
 const { Title, Text } = Typography;
@@ -771,13 +772,36 @@ export default function InvoiceReviewPage() {
                       name="total"
                       rules={[{ required: true, message: "Total is required" }]}
                     >
-                      <InputNumber
-                        style={{ width: "100%" }}
-                        min={0}
-                        precision={2}
-                        placeholder="0.00"
-                        className="font-semibold"
-                      />
+                      <div>
+                        <InputNumber
+                          style={{ width: "100%" }}
+                          min={0}
+                          precision={2}
+                          placeholder="0.00"
+                          className="font-semibold"
+                        />
+                        {(() => {
+                          const { paid, remaining } =
+                            calculateInvoicePaymentAmounts(invoice);
+                          if (paid > 0) {
+                            return (
+                              <div className="text-xs text-text-tertiary mt-2">
+                                Paid:{" "}
+                                {formatCurrency(
+                                  paid,
+                                  invoice.currency || "USD"
+                                )}{" "}
+                                | Remaining:{" "}
+                                {formatCurrency(
+                                  remaining,
+                                  invoice.currency || "USD"
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </Form.Item>
                   </Col>
                 </Row>

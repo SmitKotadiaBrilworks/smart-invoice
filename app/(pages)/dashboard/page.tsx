@@ -603,18 +603,11 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-2">
                 {invoices.slice(0, 5).map((invoice) => {
-                  const isReceivable = invoice.status === "draft";
-                  const isPayable = invoice.status === "approved";
-                  const invoiceType = isReceivable
-                    ? "receivable"
-                    : isPayable
-                    ? "payable"
-                    : "unknown";
+                  const isReceivable = invoice.invoice_type === "receivable";
+                  const invoiceType = isReceivable ? "receivable" : "payable";
                   const amountColor = isReceivable
                     ? "text-green-600"
-                    : isPayable
-                    ? "text-red-600"
-                    : "text-text-primary";
+                    : "text-red-600";
 
                   return (
                     <button
@@ -659,7 +652,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="text-right">
                         <div className={`font-semibold ${amountColor}`}>
-                          {isReceivable ? "+" : isPayable ? "-" : ""}
+                          {isReceivable ? "+" : "-"}
                           {formatCurrency(
                             invoice.total,
                             invoice.currency ||

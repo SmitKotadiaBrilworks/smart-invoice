@@ -133,24 +133,26 @@ export function DataTable<TData, TValue>({
       {pagination && (
         <div className="flex items-center justify-end space-x-2 py-4">
           <button
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-surface hover:bg-bg h-9 px-3"
+            className={`w-fit h-fit p-0 bg-transparent border-none cursor-pointer text-text-secondary ${
+              !table.getCanPreviousPage() && "opacity-50 cursor-not-allowed"
+            }`}
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="sr-only">Previous</span>
+            <ChevronLeft className="h-6 w-6" />
           </button>
-          <span className="text-sm text-text-secondary">
+          <span className="text-sm text-text-secondary mb-1">
             Page {table.getState().pagination.pageIndex + 1} of{" "}
             {table.getPageCount()}
           </span>
           <button
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-surface hover:bg-bg h-9 px-3"
+            className={`w-fit h-fit p-0 bg-transparent border-none cursor-pointer text-text-secondary ${
+              !table.getCanNextPage() && "opacity-50 cursor-not-allowed"
+            }`}
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >
-            <ChevronRight className="h-4 w-4" />
-            <span className="sr-only">Next</span>
+            <ChevronRight className="h-6 w-6" />
           </button>
         </div>
       )}

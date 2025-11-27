@@ -52,6 +52,18 @@ export default function PaymentsPage() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [matchingPayment, setMatchingPayment] = useState<Payment | null>(null);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
+  const [matchModalOpen, setMatchModalOpen] = useState(false);
+  const [matchedInvoice, setMatchedInvoice] = useState<{
+    id: string;
+    invoice_no: string;
+    total: number;
+    currency?: string;
+    vendor?: {
+      name?: string;
+    };
+    invoice_type?: "receivable" | "payable";
+  } | null>(null);
+  const [isNewPaymentFlow, setIsNewPaymentFlow] = useState(false);
 
   // Pagination state
   const [pagination, setPagination] = useState<PaginationState>({
@@ -224,7 +236,9 @@ export default function PaymentsPage() {
             label: isMatched ? "View/Edit Match" : "Match Payment",
             icon: <LinkOutlined />,
             onClick: () => {
+              setIsNewPaymentFlow(false);
               setMatchingPayment(record);
+              setMatchModalOpen(true);
             },
           },
           {
@@ -291,7 +305,11 @@ export default function PaymentsPage() {
               payment={payment}
               workspaceId={selectedWorkspace?.id || ""}
               onViewDetails={() => setViewingPayment(payment)}
-              onMatch={() => setMatchingPayment(payment)}
+              onMatch={() => {
+                setIsNewPaymentFlow(false);
+                setMatchingPayment(payment);
+                setMatchModalOpen(true);
+              }}
             />
           ))}
           {/* Mobile Pagination Controls */}
@@ -382,7 +400,9 @@ export default function PaymentsPage() {
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => {
-            setPaymentModalOpen(true);
+            setIsNewPaymentFlow(true);
+            setMatchModalOpen(true);
+            setMatchedInvoice(null); // Reset matched invoice
           }}
           className="w-full sm:w-auto"
         >
@@ -413,19 +433,45 @@ export default function PaymentsPage() {
         <>
           <PaymentModal
             open={paymentModalOpen}
-            onCancel={() => setPaymentModalOpen(false)}
+            onCancel={() => {
+              setPaymentModalOpen(false);
+              setMatchedInvoice(null); // Reset matched invoice when closing
+            }}
             workspaceId={selectedWorkspace.id}
+            matchedInvoice={matchedInvoice}
             onSuccess={() => {
               setPaymentModalOpen(false);
+              setMatchedInvoice(null);
             }}
           />
           <PaymentMatchModal
-            open={!!matchingPayment}
-            onCancel={() => setMatchingPayment(null)}
-            payment={matchingPayment}
-            workspaceId={selectedWorkspace.id}
-            onSuccess={() => {
+            open={matchModalOpen}
+            onCancel={() => {
+              setMatchModalOpen(false);
               setMatchingPayment(null);
+              setIsNewPaymentFlow(false);
+            }}
+            payment={isNewPaymentFlow ? null : matchingPayment}
+            workspaceId={selectedWorkspace.id}
+            isNewPayment={isNewPaymentFlow}
+            onInvoiceMatched={(invoiceId, invoice) => {
+              // Store matched invoice and open payment modal
+              setMatchedInvoice({
+                id: invoice.id,
+                invoice_no: invoice.invoice_no,
+                total: invoice.total,
+                currency: invoice.currency,
+                vendor: invoice.vendor,
+                invoice_type: invoice.invoice_type,
+              });
+              setMatchModalOpen(false);
+              setPaymentModalOpen(true);
+              setIsNewPaymentFlow(false);
+            }}
+            onSuccess={() => {
+              setMatchModalOpen(false);
+              setMatchingPayment(null);
+              setIsNewPaymentFlow(false);
             }}
           />
           <PaymentDetailModal

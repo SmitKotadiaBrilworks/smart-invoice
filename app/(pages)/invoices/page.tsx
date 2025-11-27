@@ -160,11 +160,25 @@ export default function InvoicesPage() {
           ? "text-red-600"
           : "text-text-primary";
 
+        // Calculate paid and remaining amounts
+        const {
+          calculateInvoicePaymentAmounts,
+        } = require("@/lib/utils/invoice-payments");
+        const { paid, remaining } = calculateInvoicePaymentAmounts(record);
+
         return (
-          <span className={`font-semibold ${colorClass}`}>
-            {isReceivable ? "+" : isPayable ? "-" : ""}
-            {formatCurrency(amount, record.currency || "USD")}
-          </span>
+          <div>
+            <span className={`font-semibold ${colorClass}`}>
+              {isReceivable ? "+" : isPayable ? "-" : ""}
+              {formatCurrency(amount, record.currency || "USD")}
+            </span>
+            {paid > 0 && (
+              <div className="text-xs text-text-tertiary mt-1">
+                Paid: {formatCurrency(paid, record.currency || "USD")} |
+                Remaining: {formatCurrency(remaining, record.currency || "USD")}
+              </div>
+            )}
+          </div>
         );
       },
     },

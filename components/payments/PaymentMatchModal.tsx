@@ -16,7 +16,6 @@ import {
 import { message } from "@/lib/toast";
 import {
   CheckOutlined,
-  CloseOutlined,
   DollarOutlined,
   EditOutlined,
   DeleteOutlined,
@@ -31,6 +30,7 @@ import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency } from "@/lib/constants/currencies";
 import type { Payment, PaymentMatch } from "@/types";
 import { format } from "date-fns";
+import { calculateInvoicePaymentAmounts } from "@/lib/utils/invoice-payments";
 
 const { Title, Text } = Typography;
 
@@ -38,16 +38,20 @@ interface PaymentMatchModalProps {
   open: boolean;
   onCancel: () => void;
   onSuccess?: () => void;
+  onInvoiceMatched?: (invoiceId: string, invoice: any) => void; // Callback when invoice is matched for new payment
   payment: Payment | null;
   workspaceId: string;
+  isNewPayment?: boolean; // Indicates this is for creating a new payment
 }
 
 export default function PaymentMatchModal({
   open,
   onCancel,
   onSuccess,
+  onInvoiceMatched,
   payment,
   workspaceId,
+  isNewPayment = false,
 }: PaymentMatchModalProps) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
@@ -63,7 +67,23 @@ export default function PaymentMatchModal({
   const { data: suggestions, isLoading: suggestionsLoading } =
     usePaymentSuggestions(payment?.id || "", workspaceId);
 
-  const { data: invoices } = useInvoices(workspaceId, {});
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(
+    workspaceId,
+    {}
+  );
+
+  // Filter invoices: only show unpaid or partially_paid invoices
+  // Calculate paid amount for each invoice and filter out fully paid ones
+  const invoices = (invoicesData?.invoices ?? []).filter((invoice) => {
+    // Don't show fully paid invoices
+    if (invoice.status === "paid") return false;
+
+    // Calculate remaining amount
+    const { remaining } = calculateInvoicePaymentAmounts(invoice);
+
+    // Only show if unpaid or partially paid (has remaining balance)
+    return remaining > 0;
+  });
   const createMatch = useCreatePaymentMatch();
   const updateMatch = useUpdatePaymentMatch();
   const deleteMatch = useDeletePaymentMatch();
@@ -83,8 +103,27 @@ export default function PaymentMatchModal({
   }, [suggestions, isMatched, existingMatch]);
 
   const handleMatch = async () => {
-    if (!payment || !selectedInvoiceId) {
+    if (!selectedInvoiceId) {
       message.error("Please select an invoice to match");
+      return;
+    }
+
+    // For new payments, just pass the matched invoice data
+    if (isNewPayment && !payment) {
+      const selectedInvoice = invoices.find(
+        (inv) => inv.id === selectedInvoiceId
+      );
+      if (selectedInvoice && onInvoiceMatched) {
+        onInvoiceMatched(selectedInvoiceId, selectedInvoice);
+        message.success("Invoice matched. You can now add the payment.");
+        onCancel();
+        return;
+      }
+    }
+
+    // For existing payments, create/update the match
+    if (!payment) {
+      message.error("Payment not found");
       return;
     }
 
@@ -151,7 +190,8 @@ export default function PaymentMatchModal({
     });
   };
 
-  if (!payment) return null;
+  // For new payments, don't require payment to exist
+  if (!isNewPayment && !payment) return null;
 
   return (
     <Modal
@@ -161,7 +201,11 @@ export default function PaymentMatchModal({
             <DollarOutlined className="text-white text-lg" />
           </div>
           <span className="text-xl font-semibold text-text-primary">
-            {isMatched ? "View/Edit Match" : "Match Payment"}
+            {isNewPayment
+              ? "Match Invoice"
+              : isMatched
+              ? "View/Edit Match"
+              : "Match Payment"}
           </span>
         </div>
       }
@@ -180,26 +224,36 @@ export default function PaymentMatchModal({
       }}
     >
       <div className="space-y-4">
-        <Card className="bg-bg">
-          <div className="flex items-center justify-between">
-            <div>
-              <Text type="secondary" className="text-sm">
-                Payment Amount
-              </Text>
-              <div className="text-2xl font-bold text-text-primary mt-1">
-                {formatCurrency(payment.amount, payment.currency || "USD")}
+        {payment && (
+          <Card className="bg-bg">
+            <div className="flex items-center justify-between">
+              <div>
+                <Text type="secondary" className="text-sm">
+                  Payment Amount
+                </Text>
+                <div className="text-2xl font-bold text-text-primary mt-1">
+                  {formatCurrency(payment.amount, payment.currency || "USD")}
+                </div>
+              </div>
+              <div className="text-right">
+                <Text type="secondary" className="text-sm">
+                  Customer
+                </Text>
+                <div className="text-text-primary font-medium mt-1">
+                  {payment.customer || "Unknown"}
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <Text type="secondary" className="text-sm">
-                Customer
-              </Text>
-              <div className="text-text-primary font-medium mt-1">
-                {payment.customer || "Unknown"}
-              </div>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
+
+        {isNewPayment && (
+          <Card className="bg-blue-50 border-blue-200">
+            <Text type="secondary" className="text-sm">
+              Please select an invoice to match before adding the payment.
+            </Text>
+          </Card>
+        )}
 
         {isMatched && !isEditing && existingMatch && (
           <Card className="bg-green-50 border-green-200">
@@ -267,12 +321,11 @@ export default function PaymentMatchModal({
             )}
           </div>
 
-          {suggestionsLoading ? (
+          {(!isNewPayment && suggestionsLoading) || invoicesLoading ? (
             <div className="text-center py-8">
-              <Text type="secondary">Loading suggestions...</Text>
+              <Text type="secondary">Loading...</Text>
             </div>
-          ) : (!suggestions || suggestions.length === 0) &&
-            (!invoices || invoices.length === 0) ? (
+          ) : !invoices || invoices.length === 0 ? (
             <Empty
               description="No invoices found"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -283,96 +336,122 @@ export default function PaymentMatchModal({
             </Empty>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
-              {/* Show suggestions first if available and not editing */}
-              {!isEditing && suggestions && suggestions.length > 0 && (
-                <>
-                  {suggestions.map((suggestion) => {
-                    const invoice = suggestion.invoice;
-                    const isSelected = selectedInvoiceId === invoice.id;
-                    const confidencePercent = (suggestion.score * 100).toFixed(
-                      0
-                    );
-                    let badgeClass = "badge-paid";
-                    if (suggestion.score < 0.7) badgeClass = "badge-overdue";
-                    else if (suggestion.score < 0.9)
-                      badgeClass = "badge-pending";
+              {/* Show suggestions first if available and not editing (only for existing payments) */}
+              {!isNewPayment &&
+                !isEditing &&
+                suggestions &&
+                suggestions.length > 0 && (
+                  <>
+                    {suggestions.map((suggestion) => {
+                      const invoice = suggestion.invoice;
+                      const isSelected = selectedInvoiceId === invoice.id;
+                      const confidencePercent = (
+                        suggestion.score * 100
+                      ).toFixed(0);
+                      let badgeClass = "badge-paid";
+                      if (suggestion.score < 0.7) badgeClass = "badge-overdue";
+                      else if (suggestion.score < 0.9)
+                        badgeClass = "badge-pending";
 
-                    return (
-                      <Card
-                        key={invoice.id}
-                        className={`cursor-pointer transition-all ${
-                          isSelected
-                            ? "border-primary border-2 bg-blue-50"
-                            : "hover:border-primary"
-                        }`}
-                        onClick={() => {
-                          setSelectedInvoiceId(invoice.id);
-                          setMatchScore(suggestion.score * 100);
-                          setMatchReason(suggestion.reason || "");
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <Text strong className="text-text-primary">
-                                {invoice.invoice_no}
-                              </Text>
-                              <Tag
-                                className={badgeClass}
-                                style={{
-                                  border: "none",
-                                  padding: "2px 8px",
-                                  borderRadius: "4px",
-                                }}
-                              >
-                                {confidencePercent}% match
-                              </Tag>
-                            </div>
-                            <div className="text-sm text-text-secondary space-y-1">
-                              <div>
-                                Vendor: {invoice.vendor?.name || "Unknown"}
+                      return (
+                        <Card
+                          key={invoice.id}
+                          className={`cursor-pointer transition-all ${
+                            isSelected
+                              ? "border-primary border-2 bg-blue-50"
+                              : "hover:border-primary"
+                          }`}
+                          onClick={() => {
+                            setSelectedInvoiceId(invoice.id);
+                            setMatchScore(suggestion.score * 100);
+                            setMatchReason(suggestion.reason || "");
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Text strong className="text-text-primary">
+                                  {invoice.invoice_no}
+                                </Text>
+                                <Tag
+                                  className={badgeClass}
+                                  style={{
+                                    border: "none",
+                                    padding: "2px 8px",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  {confidencePercent}% match
+                                </Tag>
                               </div>
-                              <div>
-                                Amount:{" "}
-                                {formatCurrency(
-                                  invoice.total,
-                                  invoice.currency || "USD"
-                                )}
-                              </div>
-                              <div>
-                                Due:{" "}
-                                {format(
-                                  new Date(invoice.due_date),
-                                  "MMM dd, yyyy"
-                                )}
-                              </div>
-                              {suggestion.reason && (
-                                <div className="text-text-tertiary text-xs mt-2">
-                                  {suggestion.reason}
+                              <div className="text-sm text-text-secondary space-y-1">
+                                <div>
+                                  Vendor: {invoice.vendor?.name || "Unknown"}
                                 </div>
-                              )}
+                                <div>
+                                  Amount:{" "}
+                                  {formatCurrency(
+                                    invoice.total,
+                                    invoice.currency || "USD"
+                                  )}
+                                </div>
+                                {(() => {
+                                  const { paid, remaining } =
+                                    calculateInvoicePaymentAmounts(invoice);
+                                  if (paid > 0) {
+                                    return (
+                                      <div className="text-xs text-text-tertiary">
+                                        Paid:{" "}
+                                        {formatCurrency(
+                                          paid,
+                                          invoice.currency || "USD"
+                                        )}{" "}
+                                        | Remaining:{" "}
+                                        {formatCurrency(
+                                          remaining,
+                                          invoice.currency || "USD"
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                                <div>
+                                  Due:{" "}
+                                  {format(
+                                    new Date(invoice.due_date),
+                                    "MMM dd, yyyy"
+                                  )}
+                                </div>
+                                {suggestion.reason && (
+                                  <div className="text-text-tertiary text-xs mt-2">
+                                    {suggestion.reason}
+                                  </div>
+                                )}
+                              </div>
                             </div>
+                            {isSelected && (
+                              <CheckOutlined className="text-primary text-xl" />
+                            )}
                           </div>
-                          {isSelected && (
-                            <CheckOutlined className="text-primary text-xl" />
-                          )}
-                        </div>
-                      </Card>
-                    );
-                  })}
-                  {isEditing && invoices && invoices.length > 0 && (
-                    <div className="pt-2 border-t border-border">
-                      <Text type="secondary" className="text-sm">
-                        Or select from all invoices:
-                      </Text>
-                    </div>
-                  )}
-                </>
-              )}
+                        </Card>
+                      );
+                    })}
+                    {isEditing && invoices && invoices.length > 0 && (
+                      <div className="pt-2 border-t border-border">
+                        <Text type="secondary" className="text-sm">
+                          Or select from all invoices:
+                        </Text>
+                      </div>
+                    )}
+                  </>
+                )}
 
-              {/* Show all invoices when editing or if no suggestions */}
-              {(isEditing || !suggestions || suggestions.length === 0) &&
-                invoices &&
+              {/* Show all invoices when editing, for new payments, or if no suggestions */}
+              {(isNewPayment ||
+                isEditing ||
+                !suggestions ||
+                suggestions.length === 0) &&
                 invoices.length > 0 && (
                   <>
                     {invoices.map((invoice) => {
@@ -430,6 +509,27 @@ export default function PaymentMatchModal({
                                     invoice.currency || "USD"
                                   )}
                                 </div>
+                                {(() => {
+                                  const { paid, remaining } =
+                                    calculateInvoicePaymentAmounts(invoice);
+                                  if (paid > 0) {
+                                    return (
+                                      <div className="text-xs text-text-tertiary">
+                                        Paid:{" "}
+                                        {formatCurrency(
+                                          paid,
+                                          invoice.currency || "USD"
+                                        )}{" "}
+                                        | Remaining:{" "}
+                                        {formatCurrency(
+                                          remaining,
+                                          invoice.currency || "USD"
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                                 <div>
                                   Due:{" "}
                                   {format(
@@ -468,7 +568,9 @@ export default function PaymentMatchModal({
                 onChange={(value) => setMatchScore(value || 100)}
                 style={{ width: "100%" }}
                 formatter={(value) => `${value}%`}
-                parser={(value) => parseFloat(value?.replace("%", "") || "0")}
+                parser={(value) =>
+                  Number.parseFloat(value?.replace("%", "") || "0")
+                }
               />
             </div>
             <div>
@@ -487,7 +589,7 @@ export default function PaymentMatchModal({
 
         <div className="flex justify-end gap-3 pt-4 border-t border-border">
           <Button onClick={onCancel}>Close</Button>
-          {(isEditing || !isMatched) && (
+          {(isNewPayment || isEditing || !isMatched) && (
             <Button
               type="primary"
               icon={<CheckOutlined />}
@@ -495,7 +597,11 @@ export default function PaymentMatchModal({
               loading={createMatch.isPending || updateMatch.isPending}
               disabled={!selectedInvoiceId}
             >
-              {isMatched ? "Update Match" : "Match Payment"}
+              {isNewPayment
+                ? "Match Invoice"
+                : isMatched
+                ? "Update Match"
+                : "Match Payment"}
             </Button>
           )}
         </div>
