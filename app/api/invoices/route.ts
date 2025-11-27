@@ -39,10 +39,15 @@ export async function GET(request: NextRequest) {
       invoice_type:
         (searchParams.get("invoice_type") as "receivable" | "payable") ||
         undefined,
+      page: parseInt(searchParams.get("page") || "1"),
+      pageSize: parseInt(searchParams.get("pageSize") || "10"),
     };
 
-    const invoices = await invoiceBackend.getInvoices(workspaceId, filters);
-    return NextResponse.json({ invoices });
+    const { invoices, count } = await invoiceBackend.getInvoices(
+      workspaceId,
+      filters
+    );
+    return NextResponse.json({ invoices, count });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -44,7 +44,8 @@ export default function DashboardPage() {
   const { data: kpis, isLoading: kpisLoading } = useDashboardKPIs(
     selectedWorkspace?.id || ""
   );
-  const { data: invoices } = useInvoices(selectedWorkspace?.id || "", {});
+  const { data: invoicesData } = useInvoices(selectedWorkspace?.id || "", {});
+  const invoices = invoicesData?.invoices ?? [];
   const { data: arAging, isLoading: arAgingLoading } = useARAging(
     selectedWorkspace?.id || ""
   );

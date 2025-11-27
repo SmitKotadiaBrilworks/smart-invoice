@@ -80,8 +80,15 @@ export const paymentBackend = {
       status?: PaymentStatus;
       date_from?: string;
       date_to?: string;
+      page?: number;
+      pageSize?: number;
     }
   ) => {
+    const page = filters?.page || 1;
+    const pageSize = filters?.pageSize || 10;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+
     let query = supabaseAdmin
       .from("payments")
       .select(
@@ -94,10 +101,12 @@ export const paymentBackend = {
             vendor:vendors(*)
           )
         )
-      `
+      `,
+        { count: "exact" }
       )
       .eq("workspace_id", workspaceId)
-      .order("received_at", { ascending: false });
+      .order("received_at", { ascending: false })
+      .range(start, end);
 
     if (filters?.source) {
       query = query.eq("source", filters.source);
@@ -112,10 +121,10 @@ export const paymentBackend = {
       query = query.lte("received_at", filters.date_to);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) throw error;
-    return data as Payment[];
+    return { payments: data as Payment[], count: count || 0 };
   },
 
   // Get single payment

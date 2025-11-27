@@ -11,6 +11,8 @@ import {
 } from "@/hooks/useInvoices";
 import { useVendors } from "@/hooks/useVendors";
 import LoadingPage from "@/components/common/LoadingPage";
+import { DataTable } from "@/components/ui/DataTable";
+import { ColumnDef } from "@tanstack/react-table";
 
 import {
   Card,
@@ -22,7 +24,6 @@ import {
   Spin,
   Row,
   Col,
-  Table,
   Tag,
   Space,
   Divider,
@@ -117,9 +118,11 @@ export default function InvoiceReviewPage() {
     refetch,
   } = useInvoice(invoiceId, selectedWorkspace?.id || "");
 
-  const { data: vendors, isLoading: vendorsLoading } = useVendors(
-    selectedWorkspace?.id || ""
+  const { data: vendorsData, isLoading: vendorsLoading } = useVendors(
+    selectedWorkspace?.id || "",
+    { pageSize: 1000 }
   );
+  const vendors = vendorsData?.vendors;
 
   const updateInvoice = useUpdateInvoice();
   const approveInvoice = useApproveInvoice();
@@ -322,38 +325,37 @@ export default function InvoiceReviewPage() {
 
   const confidence = invoice.confidence || 0;
 
-  const lineItemsColumns = [
+  const getLineItemsColumns = (): ColumnDef<InvoiceLine>[] => [
     {
-      title: "Description",
-      dataIndex: "description",
-      key: "description",
+      accessorKey: "description",
+      header: "Description",
     },
     {
-      title: "Qty",
-      dataIndex: "qty",
-      key: "qty",
-      render: (qty: number) => qty.toFixed(2),
+      accessorKey: "qty",
+      header: "Qty",
+      cell: ({ row }) => (row.getValue("qty") as number).toFixed(2),
     },
     {
-      title: "Unit Price",
-      dataIndex: "unit_price",
-      key: "unit_price",
-      render: (price: number) =>
-        formatCurrency(price, invoice.currency || "USD"),
+      accessorKey: "unit_price",
+      header: "Unit Price",
+      cell: ({ row }) =>
+        formatCurrency(row.getValue("unit_price"), invoice.currency || "USD"),
     },
     {
-      title: "Tax %",
-      dataIndex: "tax_percent",
-      key: "tax_percent",
-      render: (tax: number) => `${tax.toFixed(2)}%`,
+      accessorKey: "tax_percent",
+      header: "Tax %",
+      cell: ({ row }) =>
+        `${(row.getValue("tax_percent") as number).toFixed(2)}%`,
     },
     {
-      title: "Total",
-      dataIndex: "line_total",
-      key: "line_total",
-      render: (total: number) => (
+      accessorKey: "line_total",
+      header: "Total",
+      cell: ({ row }) => (
         <span className="font-semibold">
-          {formatCurrency(total, invoice.currency || "USD")}
+          {formatCurrency(
+            row.getValue("line_total"),
+            invoice.currency || "USD"
+          )}
         </span>
       ),
     },
@@ -797,13 +799,10 @@ export default function InvoiceReviewPage() {
                   <Text strong className="text-text-primary mb-2 block">
                     Line items
                   </Text>
-                  <Table
-                    columns={lineItemsColumns}
-                    dataSource={invoice.lines || []}
-                    rowKey="id"
+                  <DataTable
+                    columns={getLineItemsColumns()}
+                    data={invoice.lines || []}
                     pagination={false}
-                    size="small"
-                    scroll={{ x: "max-content" }}
                   />
                 </div>
 

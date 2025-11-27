@@ -2,15 +2,27 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Vendor } from "@/types";
 
 export const vendorBackend = {
-  getVendors: async (workspaceId: string) => {
-    const { data, error } = await supabaseAdmin
+  getVendors: async (
+    workspaceId: string,
+    filters?: {
+      page?: number;
+      pageSize?: number;
+    }
+  ) => {
+    const page = filters?.page || 1;
+    const pageSize = filters?.pageSize || 10;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+
+    const { data, error, count } = await supabaseAdmin
       .from("vendors")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("workspace_id", workspaceId)
-      .order("name", { ascending: true });
+      .order("name", { ascending: true })
+      .range(start, end);
 
     if (error) throw error;
-    return data as Vendor[];
+    return { vendors: data as Vendor[], count: count || 0 };
   },
 
   getVendor: async (vendorId: string, workspaceId: string) => {

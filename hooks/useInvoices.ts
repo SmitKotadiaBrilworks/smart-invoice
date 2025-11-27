@@ -11,6 +11,8 @@ export const useInvoices = (
     date_from?: string;
     date_to?: string;
     invoice_type?: "receivable" | "payable";
+    page?: number;
+    pageSize?: number;
   }
 ) => {
   return useQuery({
@@ -23,9 +25,15 @@ export const useInvoices = (
       if (filters?.date_to) params.append("date_to", filters.date_to);
       if (filters?.invoice_type)
         params.append("invoice_type", filters.invoice_type);
+      if (filters?.page) params.append("page", filters.page.toString());
+      if (filters?.pageSize)
+        params.append("pageSize", filters.pageSize.toString());
 
       const { data } = await apiClient.get(`/invoices?${params.toString()}`);
-      return data.invoices as Invoice[];
+      return {
+        invoices: data.invoices as Invoice[],
+        count: data.count as number,
+      };
     },
     enabled: !!workspaceId,
   });

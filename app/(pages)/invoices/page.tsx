@@ -10,8 +10,10 @@ import { useVendors } from "@/hooks/useVendors";
 import UploadInvoiceModal from "@/components/invoices/UploadInvoiceModal";
 import InvoiceCard from "@/components/invoices/InvoiceCard";
 import LoadingPage from "@/components/common/LoadingPage";
+import { DataTable } from "@/components/ui/DataTable";
+import { ColumnDef, PaginationState } from "@tanstack/react-table";
+
 import {
-  Table,
   Button,
   Card,
   Typography,
@@ -33,6 +35,7 @@ import {
   MoreOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Invoice } from "@/types";
 import { formatCurrency } from "@/lib/constants/currencies";
 import { format } from "date-fns";
@@ -52,18 +55,31 @@ export default function InvoicesPage() {
     "receivable" | "payable" | undefined
   >(undefined);
 
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 5,
+  });
+
   const {
-    data: invoices,
+    data: invoicesData,
     isLoading: invoicesLoading,
     refetch,
   } = useInvoices(selectedWorkspace?.id || "", {
     status: statusFilter as any,
     invoice_type: typeFilter,
+    page: pagination.pageIndex + 1,
+    pageSize: pagination.pageSize,
   });
 
-  const { data: vendors, isLoading: vendorsLoading } = useVendors(
+  const invoices = invoicesData?.invoices;
+  const totalCount = invoicesData?.count || 0;
+  const pageCount = Math.ceil(totalCount / pagination.pageSize);
+
+  const { data: vendorsData, isLoading: vendorsLoading } = useVendors(
     selectedWorkspace?.id || ""
   );
+  const vendors = vendorsData?.vendors;
 
   const deleteInvoice = useDeleteInvoice();
 
@@ -76,29 +92,30 @@ export default function InvoicesPage() {
     return null;
   }
 
-  const columns = [
+  const getColumns = (): ColumnDef<Invoice>[] => [
     {
-      title: "File name",
-      key: "file_name",
-      render: (_: any, record: Invoice) => (
+      accessorKey: "file_name",
+      header: "File name",
+      cell: ({ row }) => (
         <span className="text-text-primary font-medium">
-          {record.invoice_no || `Invoice-${record.id.slice(0, 8)}`}
+          {row.original.invoice_no || `Invoice-${row.original.id.slice(0, 8)}`}
         </span>
       ),
     },
     {
-      title: "Vendor (AI guess)",
-      key: "vendor",
-      render: (_: any, record: Invoice) => (
+      accessorKey: "vendor",
+      header: "Vendor (AI guess)",
+      cell: ({ row }) => (
         <span className="text-text-secondary">
-          {record.vendor?.name || "Unknown vendor"}
+          {row.original.vendor?.name || "Unknown vendor"}
         </span>
       ),
     },
     {
-      title: "Type",
-      key: "invoice_type",
-      render: (_: any, record: Invoice) => {
+      accessorKey: "invoice_type",
+      header: "Type",
+      cell: ({ row }) => {
+        const record = row.original;
         // Use invoice_type from database, fallback to status-based logic for backward compatibility
         const invoiceType =
           record.invoice_type ||
@@ -125,10 +142,11 @@ export default function InvoicesPage() {
       },
     },
     {
-      title: "Amount",
-      dataIndex: "total",
-      key: "total",
-      render: (amount: number, record: Invoice) => {
+      accessorKey: "total",
+      header: "Amount",
+      cell: ({ row }) => {
+        const record = row.original;
+        const amount = row.getValue("total") as number;
         // Color code amounts: green for receivables, red for payables
         // Use invoice_type from database, fallback to status-based logic
         const invoiceType =
@@ -151,10 +169,10 @@ export default function InvoicesPage() {
       },
     },
     {
-      title: "Confidence",
-      dataIndex: "confidence",
-      key: "confidence",
-      render: (confidence: number) => {
+      accessorKey: "confidence",
+      header: "Confidence",
+      cell: ({ row }) => {
+        const confidence = row.getValue("confidence") as number;
         const percent = (confidence * 100).toFixed(0);
         let badgeClass = "badge-paid";
         if (confidence < 0.7) badgeClass = "badge-overdue";
@@ -171,10 +189,10 @@ export default function InvoicesPage() {
       },
     },
     {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (status: string) => {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
         const badgeClasses: Record<string, string> = {
           draft: "badge-draft",
           approved: "badge-paid",
@@ -197,19 +215,19 @@ export default function InvoicesPage() {
       },
     },
     {
-      title: "Uploaded at",
-      dataIndex: "created_at",
-      key: "created_at",
-      render: (date: string) => (
+      accessorKey: "created_at",
+      header: "Uploaded at",
+      cell: ({ row }) => (
         <span className="text-text-tertiary text-sm">
-          {format(new Date(date), "MMM dd, yyyy HH:mm")}
+          {format(new Date(row.getValue("created_at")), "MMM dd, yyyy HH:mm")}
         </span>
       ),
     },
     {
-      title: "Actions",
-      key: "actions",
-      render: (_: any, record: Invoice) => {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const record = row.original;
         const handleView = () => {
           router.push(`/invoices/review/${record.id}`);
         };
@@ -428,25 +446,43 @@ export default function InvoicesPage() {
                 onRefetch={refetch}
               />
             ))}
-            {/* Simple pagination for mobile */}
-            <div className="text-center mt-4 text-sm text-text-tertiary">
-              Showing {invoices.length} invoice
-              {invoices.length !== 1 ? "s" : ""}
+            {/* Mobile Pagination Controls */}
+            <div className="flex items-center justify-between mt-4 px-2">
+              <Button
+                icon={<ChevronLeft className="h-4 w-4" />}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.max(0, prev.pageIndex - 1),
+                  }))
+                }
+                disabled={pagination.pageIndex === 0}
+              />
+              <span className="text-sm text-text-secondary">
+                Page {pagination.pageIndex + 1} of {pageCount}
+              </span>
+              <Button
+                icon={<ChevronRight className="h-4 w-4" />}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(pageCount - 1, prev.pageIndex + 1),
+                  }))
+                }
+                disabled={pagination.pageIndex >= pageCount - 1}
+              />
             </div>
           </div>
         ) : (
           /* Desktop Table View */
           <div className="overflow-x-auto">
-            <Table
-              columns={columns}
-              dataSource={invoices}
-              rowKey="id"
-              pagination={{
-                pageSize: 5,
-                showSizeChanger: false,
-                showTotal: (total) => `Total ${total} invoices`,
-              }}
-              scroll={{ x: "max-content" }}
+            <DataTable
+              columns={getColumns()}
+              data={invoices}
+              pagination={true}
+              pageCount={pageCount}
+              state={{ pagination }}
+              onPaginationChange={setPagination}
             />
           </div>
         )}

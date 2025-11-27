@@ -15,9 +15,10 @@ import PaymentMatchModal from "@/components/payments/PaymentMatchModal";
 import PaymentDetailModal from "@/components/payments/PaymentDetailModal";
 import PaymentCard from "@/components/payments/PaymentCard";
 import LoadingPage from "@/components/common/LoadingPage";
+import { DataTable } from "@/components/ui/DataTable";
+import { ColumnDef, PaginationState } from "@tanstack/react-table";
 
 import {
-  Table,
   Button,
   Card,
   Typography,
@@ -37,6 +38,7 @@ import {
   EyeOutlined,
   MoreOutlined,
 } from "@ant-design/icons";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatCurrency } from "@/lib/constants/currencies";
 import type { Payment } from "@/types";
 import { format } from "date-fns";
@@ -51,10 +53,24 @@ export default function PaymentsPage() {
   const [matchingPayment, setMatchingPayment] = useState<Payment | null>(null);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
 
-  const { data: payments, isLoading: paymentsLoading } = usePayments(
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 5,
+  });
+
+  const { data: paymentsData, isLoading: paymentsLoading } = usePayments(
     selectedWorkspace?.id || "",
-    {}
+    {
+      page: pagination.pageIndex + 1,
+      pageSize: pagination.pageSize,
+    }
   );
+
+  const payments = paymentsData?.payments;
+  const totalCount = paymentsData?.count || 0;
+  const pageCount = Math.ceil(totalCount / pagination.pageSize);
+
   const { data: unmatchedPayments, isLoading: unmatchedLoading } =
     useUnmatchedPayments(selectedWorkspace?.id || "");
   const { data: matchedPayments, isLoading: matchedLoading } =
@@ -71,37 +87,35 @@ export default function PaymentsPage() {
     return null;
   }
 
-  const paymentColumns = [
+  const getColumns = (): ColumnDef<Payment>[] => [
     {
-      title: "Date",
-      dataIndex: "received_at",
-      key: "received_at",
-      render: (date: string) => format(new Date(date), "MMM dd, yyyy"),
+      accessorKey: "received_at",
+      header: "Date",
+      cell: ({ row }) =>
+        format(new Date(row.getValue("received_at")), "MMM dd, yyyy"),
     },
     {
-      title: "Customer",
-      dataIndex: "customer",
-      key: "customer",
+      accessorKey: "customer",
+      header: "Customer",
     },
     {
-      title: "Amount",
-      dataIndex: "amount",
-      key: "amount",
-      render: (amount: number, record: Payment) =>
-        formatCurrency(amount, record.currency || "USD"),
+      accessorKey: "amount",
+      header: "Amount",
+      cell: ({ row }) =>
+        formatCurrency(row.getValue("amount"), row.original.currency || "USD"),
     },
     {
-      title: "Net",
-      dataIndex: "net",
-      key: "net",
-      render: (net: number, record: Payment) =>
-        formatCurrency(net, record.currency || "USD"),
+      accessorKey: "net",
+      header: "Net",
+      cell: ({ row }) =>
+        formatCurrency(row.getValue("net"), row.original.currency || "USD"),
     },
     {
-      title: "Match Status",
-      key: "match_status",
-      render: (_: any, record: Payment) => {
-        const isMatched = record.matches && record.matches.length > 0;
+      id: "match_status",
+      header: "Match Status",
+      cell: ({ row }) => {
+        const isMatched =
+          row.original.matches && row.original.matches.length > 0;
         return (
           <Tag
             className={isMatched ? "badge-paid" : "badge-pending"}
@@ -113,20 +127,19 @@ export default function PaymentsPage() {
       },
     },
     {
-      title: "Source",
-      dataIndex: "source",
-      key: "source",
-      render: (source: string) => (
-        <Tag color={source === "stripe" ? "blue" : "default"}>
-          {source.toUpperCase()}
+      accessorKey: "source",
+      header: "Source",
+      cell: ({ row }) => (
+        <Tag color={row.getValue("source") === "stripe" ? "blue" : "default"}>
+          {(row.getValue("source") as string).toUpperCase()}
         </Tag>
       ),
     },
     {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (status: string) => {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
         const badgeClasses: Record<string, string> = {
           pending: "badge-pending",
           completed: "badge-paid",
@@ -145,9 +158,10 @@ export default function PaymentsPage() {
       },
     },
     {
-      title: "Actions",
-      key: "actions",
-      render: (_: any, record: Payment) => {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const record = row.original;
         const isMatched = record.matches && record.matches.length > 0;
 
         const handleDelete = () => {
@@ -245,7 +259,8 @@ export default function PaymentsPage() {
   const renderPaymentContent = (
     paymentList: Payment[] | undefined,
     loading: boolean,
-    totalLabel: string
+    totalLabel: string,
+    isMainTab: boolean = false
   ) => {
     if (loading) {
       return (
@@ -279,11 +294,34 @@ export default function PaymentsPage() {
               onMatch={() => setMatchingPayment(payment)}
             />
           ))}
-          {/* Simple pagination info for mobile */}
-          <div className="text-center mt-4 text-sm text-text-tertiary">
-            Showing {paymentList.length} payment
-            {paymentList.length !== 1 ? "s" : ""}
-          </div>
+          {/* Mobile Pagination Controls */}
+          {isMainTab && (
+            <div className="flex items-center justify-between mt-4 px-2">
+              <Button
+                icon={<ChevronLeft className="h-4 w-4" />}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.max(0, prev.pageIndex - 1),
+                  }))
+                }
+                disabled={pagination.pageIndex === 0}
+              />
+              <span className="text-sm text-text-secondary">
+                Page {pagination.pageIndex + 1} of {pageCount}
+              </span>
+              <Button
+                icon={<ChevronRight className="h-4 w-4" />}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(pageCount - 1, prev.pageIndex + 1),
+                  }))
+                }
+                disabled={pagination.pageIndex >= pageCount - 1}
+              />
+            </div>
+          )}
         </div>
       );
     }
@@ -291,16 +329,13 @@ export default function PaymentsPage() {
     /* Desktop Table View */
     return (
       <div className="overflow-auto">
-        <Table
-          columns={paymentColumns}
-          dataSource={paymentList}
-          rowKey="id"
-          pagination={{
-            pageSize: 5,
-            showSizeChanger: false,
-            showTotal: (total) => `Total ${total} ${totalLabel}`,
-          }}
-          scroll={{ x: "max-content" }}
+        <DataTable
+          columns={getColumns()}
+          data={paymentList}
+          pagination={isMainTab}
+          pageCount={isMainTab ? pageCount : undefined}
+          state={isMainTab ? { pagination } : undefined}
+          onPaginationChange={isMainTab ? setPagination : undefined}
         />
       </div>
     );
@@ -310,7 +345,12 @@ export default function PaymentsPage() {
     {
       key: "all",
       label: "All Payments",
-      children: renderPaymentContent(payments, paymentsLoading, "payments"),
+      children: renderPaymentContent(
+        payments,
+        paymentsLoading,
+        "payments",
+        true
+      ),
     },
     {
       key: "matched",
@@ -350,7 +390,9 @@ export default function PaymentsPage() {
         </Button>
       </div>
 
-      {!payments || payments.length === 0 ? (
+      {!paymentsLoading &&
+      (!payments || payments.length === 0) &&
+      pagination.pageIndex === 0 ? (
         <Card className="card-shadow" bodyStyle={{ padding: "16px" }}>
           <div className="py-12">
             <Empty

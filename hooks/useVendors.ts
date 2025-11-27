@@ -2,18 +2,37 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase/client";
 import type { Vendor } from "@/types";
 
-export const useVendors = (workspaceId: string) => {
+export const useVendors = (
+  workspaceId: string,
+  filters?: {
+    page?: number;
+    pageSize?: number;
+  }
+) => {
   return useQuery({
-    queryKey: ["vendors", workspaceId],
+    queryKey: ["vendors", workspaceId, filters],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const params = new URLSearchParams({ workspace_id: workspaceId });
+      if (filters?.page) params.append("page", filters.page.toString());
+      if (filters?.pageSize)
+        params.append("pageSize", filters.pageSize.toString());
+
+      const { data, error, count } = await supabase
         .from("vendors")
-        .select("*")
+        .select("*", { count: "exact" })
         .eq("workspace_id", workspaceId)
-        .order("name", { ascending: true });
+        .order("name", { ascending: true })
+        .range(
+          (filters?.page || 1) * (filters?.pageSize || 10) -
+            (filters?.pageSize || 10),
+          (filters?.page || 1) * (filters?.pageSize || 10) - 1
+        );
 
       if (error) throw error;
-      return data as Vendor[];
+      return {
+        vendors: data as Vendor[],
+        count: count || 0,
+      };
     },
     enabled: !!workspaceId,
   });

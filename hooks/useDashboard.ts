@@ -4,14 +4,17 @@ import { usePayments } from "./usePayments";
 import type { DashboardKPIs, ARAgingBucket } from "@/types";
 
 export const useDashboardKPIs = (workspaceId: string) => {
-  const { data: invoices, isLoading: invoicesLoading } = useInvoices(
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(
     workspaceId,
     {}
   );
-  const { data: payments, isLoading: paymentsLoading } = usePayments(
+  const invoices = invoicesData?.invoices ?? [];
+  const { data: paymentsData, isLoading: paymentsLoading } = usePayments(
     workspaceId,
     {}
   );
+
+  const payments = paymentsData?.payments ?? [];
 
   const kpis: DashboardKPIs = useMemo(() => {
     if (!invoices || invoices.length === 0) {
@@ -151,7 +154,8 @@ export const useDashboardKPIs = (workspaceId: string) => {
 };
 
 export const useARAging = (workspaceId: string) => {
-  const { data: invoices, isLoading } = useInvoices(workspaceId, {});
+  const { data: invoicesData, isLoading } = useInvoices(workspaceId, {});
+  const invoices = invoicesData?.invoices ?? [];
 
   const arAging: ARAgingBucket[] = useMemo(() => {
     if (!invoices || invoices.length === 0) {
