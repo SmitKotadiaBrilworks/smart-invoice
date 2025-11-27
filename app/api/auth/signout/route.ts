@@ -7,19 +7,20 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
 
-    const supabase = createServerClient(token);
-    const { error } = await supabase.auth.signOut();
-
-    // Create response
-    const response = NextResponse.json({ success: true });
-
-    // Clear tokens from cookies
-    TokenManager.clearTokens(response);
-
-    if (error) {
-      // Even if signOut fails, clear cookies
-      return response;
+    // Try to sign out from Supabase, but don't fail if it errors
+    if (token) {
+      try {
+        const supabase = createServerClient(token);
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        // Continue even if signOut fails - we still want to clear cookies
+        console.warn("Supabase signOut error (ignored):", signOutError);
+      }
     }
+
+    // Always clear cookies regardless of Supabase signOut result
+    const response = NextResponse.json({ success: true });
+    TokenManager.clearTokens(response);
 
     return response;
   } catch (error: any) {
