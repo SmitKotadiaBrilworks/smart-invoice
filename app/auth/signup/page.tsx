@@ -7,6 +7,7 @@ import { Form, Input, Button, Card, Typography } from "antd";
 import { message } from "@/lib/toast";
 import { UserAddOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import Link from "next/link";
+import Image from "next/image";
 
 const { Title } = Typography;
 
@@ -54,10 +55,13 @@ export default function SignUpPage() {
                 Back
               </Button>
             </Link>
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary mb-4">
-                <UserAddOutlined className="text-white text-2xl" />
-              </div>
+            <div className="text-center mb-6 ">
+              <Image
+                src="/invoice-logo.svg"
+                alt="Logo"
+                width={100}
+                height={100}
+              />
               <Title
                 level={2}
                 className="!mb-2 !font-semibold !text-text-primary"
@@ -73,7 +77,7 @@ export default function SignUpPage() {
             onFinish={onFinish}
             layout="vertical"
             autoComplete="off"
-            size="large"
+            size="middle"
           >
             <Form.Item label="Name" name="name" rules={[{ required: false }]}>
               <Input placeholder="Enter your name (optional)" />
@@ -135,7 +139,7 @@ export default function SignUpPage() {
             </Form.Item>
           </Form>
 
-          <div className="text-center mt-6 pt-6 border-t border-border">
+          <div className="text-center border-t border-border">
             <span className="text-text-secondary">
               Already have an account?{" "}
             </span>
