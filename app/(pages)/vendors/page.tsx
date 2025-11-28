@@ -110,16 +110,13 @@ export default function VendorsPage() {
         </Button>
       </div>
 
-      <Card
-        className="border-none shadow-none md:card-shadow"
-        bodyStyle={{ padding: isMobile ? "0px" : "16px" }}
-      >
+      <div>
         {vendorsLoading ? (
-          <div className="flex justify-center py-12">
+          <div className="py-12 w-available h-available flex justify-center items-center">
             <Spin size="large" />
           </div>
         ) : !vendors || vendors.length === 0 ? (
-          <div className="py-12">
+          <Card className="card-shadow py-12">
             <Empty
               description="No vendors yet"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -140,7 +137,7 @@ export default function VendorsPage() {
                 Add Your First Vendor
               </Button>
             </Empty>
-          </div>
+          </Card>
         ) : isMobile ? (
           /* Mobile Card View */
           <div>
@@ -183,7 +180,7 @@ export default function VendorsPage() {
           </div>
         ) : (
           /* Desktop Table View */
-          <div className="overflow-x-auto">
+          <Card className="card-shadow overflow-x-auto">
             <DataTable
               columns={getColumns()}
               data={vendors}
@@ -192,9 +189,9 @@ export default function VendorsPage() {
               state={{ pagination }}
               onPaginationChange={setPagination}
             />
-          </div>
+          </Card>
         )}
-      </Card>
+      </div>
 
       {selectedWorkspace && (
         <VendorModal

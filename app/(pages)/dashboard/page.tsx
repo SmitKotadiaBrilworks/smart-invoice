@@ -42,12 +42,14 @@ export default function DashboardPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const { data: kpis, isLoading: kpisLoading } = useDashboardKPIs(
-    selectedWorkspace?.id || ""
+    selectedWorkspace?.id || "",
+    selectedWorkspace?.currency || "USD"
   );
   const { data: invoicesData } = useInvoices(selectedWorkspace?.id || "", {});
   const invoices = invoicesData?.invoices ?? [];
   const { data: arAging, isLoading: arAgingLoading } = useARAging(
-    selectedWorkspace?.id || ""
+    selectedWorkspace?.id || "",
+    selectedWorkspace?.currency || "USD"
   );
 
   // No need for redirect - middleware handles it
