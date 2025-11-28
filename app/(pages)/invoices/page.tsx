@@ -401,16 +401,13 @@ export default function InvoicesPage() {
         </Space>
       </div>
 
-      <Card
-        className="card-shadow"
-        bodyStyle={{ padding: isMobile ? "0px" : "16px" }}
-      >
+      <div className="w-available h-available">
         {invoicesLoading || vendorsLoading ? (
-          <div className="flex justify-center py-12">
+          <div className="py-12 w-available h-available flex justify-center items-center">
             <Spin size="large" />
           </div>
         ) : !invoices || invoices.length === 0 ? (
-          <div className="py-12">
+          <Card className="card-shadow">
             {!hasVendors ? (
               <Empty
                 description="No vendors found"
@@ -448,7 +445,7 @@ export default function InvoicesPage() {
                 </Button>
               </Empty>
             )}
-          </div>
+          </Card>
         ) : isMobile ? (
           /* Mobile Card View */
           <div>
@@ -489,7 +486,7 @@ export default function InvoicesPage() {
           </div>
         ) : (
           /* Desktop Table View */
-          <div className="overflow-x-auto">
+          <Card className="card-shadow overflow-x-auto">
             <DataTable
               columns={getColumns()}
               data={invoices}
@@ -498,9 +495,9 @@ export default function InvoicesPage() {
               state={{ pagination }}
               onPaginationChange={setPagination}
             />
-          </div>
+          </Card>
         )}
-      </Card>
+      </div>
 
       {selectedWorkspace && (
         <UploadInvoiceModal

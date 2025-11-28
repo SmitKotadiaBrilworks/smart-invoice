@@ -15,20 +15,24 @@ interface ExchangeRateResponse {
  * @param targetCurrency - Target currency code (e.g., 'INR', 'EUR')
  * @returns Converted amount in target currency, or original USD amount if conversion fails
  */
-export async function convertUsdToCurrency(
-  usdAmount: number,
-  targetCurrency: string
+export async function convertAmoutToLocalCurrency(
+  amount: number,
+  targetCurrency: string,
+  invoiceCurrency?: string
 ): Promise<number> {
-  // If target currency is USD, no conversion needed
-  if (targetCurrency.toUpperCase() === "USD") {
-    return usdAmount;
+  // If target currency is USD, no conversion n eeded
+  if (
+    invoiceCurrency &&
+    invoiceCurrency.toUpperCase() === targetCurrency.toUpperCase()
+  ) {
+    return amount;
   }
 
   try {
     // Use exchangerate-api.com free endpoint (no API key required for basic usage)
     // Alternative: You can use other free APIs like exchangerate.host, fixer.io, etc.
     const response = await fetch(
-      `https://api.exchangerate-api.com/v4/latest/USD`,
+      `https://api.exchangerate-api.com/v4/latest/${invoiceCurrency || "USD"}`,
       {
         method: "GET",
         headers: {
@@ -45,26 +49,30 @@ export async function convertUsdToCurrency(
 
     const data: ExchangeRateResponse = await response.json();
 
+    console.log("exchange rate", data);
+
     if (!data.rates || !data.rates[targetCurrency.toUpperCase()]) {
       console.warn(
         `Exchange rate not found for ${targetCurrency}, using USD amount`
       );
-      return usdAmount;
+      return amount;
     }
 
     const rate = data.rates[targetCurrency.toUpperCase()];
-    const convertedAmount = usdAmount * rate;
+    const convertedAmount = amount * rate;
 
     // Round to 2 decimal places for currency
     return Math.round(convertedAmount * 100) / 100;
   } catch (error) {
     console.error(
-      `Error converting ${usdAmount} USD to ${targetCurrency}:`,
+      `Error converting ${amount} ${
+        invoiceCurrency || "USD"
+      } to ${targetCurrency}:`,
       error
     );
     // Fallback: return original USD amount if conversion fails
     // This ensures the webhook doesn't fail, but fee calculation might be slightly off
-    return usdAmount;
+    return amount;
   }
 }
 
@@ -78,5 +86,5 @@ export async function getStripeFixedFeeInCurrency(
 ): Promise<number> {
   // Stripe's fixed fee is $0.30 USD
   const usdFixedFee = 0.3;
-  return await convertUsdToCurrency(usdFixedFee, targetCurrency);
+  return await convertAmoutToLocalCurrency(usdFixedFee, targetCurrency);
 }
