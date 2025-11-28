@@ -8,18 +8,12 @@ import { useVendors } from "@/hooks/useVendors";
 import VendorModal from "@/components/vendors/VendorModal";
 import VendorCard from "@/components/vendors/VendorCard";
 import LoadingPage from "@/components/common/LoadingPage";
+import { DataTable } from "@/components/ui/DataTable";
+import { ColumnDef, PaginationState } from "@tanstack/react-table";
 
-import {
-  Table,
-  Button,
-  Card,
-  Typography,
-  Space,
-  Spin,
-  Empty,
-  message,
-} from "antd";
+import { Button, Card, Typography, Space, Spin, Empty, message } from "antd";
 import { PlusOutlined, EditOutlined } from "@ant-design/icons";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Vendor } from "@/types";
 
 const { Title } = Typography;
@@ -31,9 +25,23 @@ export default function VendorsPage() {
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
-  const { data: vendors, isLoading: vendorsLoading } = useVendors(
-    selectedWorkspace?.id || ""
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 5,
+  });
+
+  const { data: vendorsData, isLoading: vendorsLoading } = useVendors(
+    selectedWorkspace?.id || "",
+    {
+      page: pagination.pageIndex + 1,
+      pageSize: pagination.pageSize,
+    }
   );
+
+  const vendors = vendorsData?.vendors;
+  const totalCount = vendorsData?.count || 0;
+  const pageCount = Math.ceil(totalCount / pagination.pageSize);
 
   // No need for redirect - middleware handles it
 
@@ -45,44 +53,40 @@ export default function VendorsPage() {
     return null;
   }
 
-  const columns = [
+  const getColumns = (): ColumnDef<Vendor>[] => [
     {
-      title: "Name",
-      dataIndex: "name",
-      key: "name",
+      accessorKey: "name",
+      header: "Name",
     },
     {
-      title: "Tax ID",
-      dataIndex: "tax_id",
-      key: "tax_id",
+      accessorKey: "tax_id",
+      header: "Tax ID",
     },
     {
-      title: "Default Category",
-      dataIndex: "default_category",
-      key: "default_category",
+      accessorKey: "default_category",
+      header: "Default Category",
     },
     {
-      title: "Contact Email",
-      dataIndex: "contact_email",
-      key: "contact_email",
+      accessorKey: "contact_email",
+      header: "Contact Email",
     },
     {
-      title: "Actions",
-      key: "actions",
-      render: (_: any, record: Vendor) => (
-        <Space>
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <div className="flex gap-2">
           <Button
             type="link"
             icon={<EditOutlined />}
             onClick={() => {
-              setEditingVendor(record);
+              setEditingVendor(row.original);
               setVendorModalOpen(true);
             }}
             className="text-primary"
           >
             Edit
           </Button>
-        </Space>
+        </div>
       ),
     },
   ];
@@ -150,24 +154,43 @@ export default function VendorsPage() {
                 }}
               />
             ))}
-            {/* Simple pagination for mobile */}
-            <div className="text-center mt-4 text-sm text-text-tertiary">
-              Showing {vendors.length} vendor{vendors.length !== 1 ? "s" : ""}
+            {/* Mobile Pagination Controls */}
+            <div className="flex items-center justify-between mt-4 px-2">
+              <Button
+                icon={<ChevronLeft className="h-4 w-4" />}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.max(0, prev.pageIndex - 1),
+                  }))
+                }
+                disabled={pagination.pageIndex === 0}
+              />
+              <span className="text-sm text-text-secondary">
+                Page {pagination.pageIndex + 1} of {pageCount}
+              </span>
+              <Button
+                icon={<ChevronRight className="h-4 w-4" />}
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(pageCount - 1, prev.pageIndex + 1),
+                  }))
+                }
+                disabled={pagination.pageIndex >= pageCount - 1}
+              />
             </div>
           </div>
         ) : (
           /* Desktop Table View */
           <div className="overflow-x-auto">
-            <Table
-              columns={columns}
-              dataSource={vendors}
-              rowKey="id"
-              pagination={{
-                pageSize: 5,
-                showSizeChanger: false,
-                showTotal: (total) => `Total ${total} vendors`,
-              }}
-              scroll={{ x: "max-content" }}
+            <DataTable
+              columns={getColumns()}
+              data={vendors}
+              pagination={true}
+              pageCount={pageCount}
+              state={{ pagination }}
+              onPaginationChange={setPagination}
             />
           </div>
         )}

@@ -14,6 +14,7 @@ import type { Invoice } from "@/types";
 import { useRouter } from "next/navigation";
 import { Modal, message } from "antd";
 import { useDeleteInvoice } from "@/hooks/useInvoices";
+import { calculateInvoicePaymentAmounts } from "@/lib/utils/invoice-payments";
 
 interface InvoiceCardProps {
   invoice: Invoice;
@@ -193,6 +194,18 @@ export default function InvoiceCard({
               {isReceivable ? "+" : isPayable ? "-" : ""}
               {formatCurrency(invoice.total, invoice.currency || "USD")}
             </div>
+            {(() => {
+              const { paid, remaining } = calculateInvoicePaymentAmounts(invoice);
+              if (paid > 0) {
+                return (
+                  <div className="text-xs text-text-tertiary mt-1">
+                    Paid: {formatCurrency(paid, invoice.currency || "USD")} | Remaining:{" "}
+                    {formatCurrency(remaining, invoice.currency || "USD")}
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         </div>
 

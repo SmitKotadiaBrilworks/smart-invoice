@@ -2,16 +2,20 @@ import { useMemo } from "react";
 import { useInvoices } from "./useInvoices";
 import { usePayments } from "./usePayments";
 import type { DashboardKPIs, ARAgingBucket } from "@/types";
+import { calculateInvoicePaymentAmounts } from "@/lib/utils/invoice-payments";
 
 export const useDashboardKPIs = (workspaceId: string) => {
-  const { data: invoices, isLoading: invoicesLoading } = useInvoices(
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(
     workspaceId,
     {}
   );
-  const { data: payments, isLoading: paymentsLoading } = usePayments(
+  const invoices = invoicesData?.invoices ?? [];
+  const { data: paymentsData, isLoading: paymentsLoading } = usePayments(
     workspaceId,
     {}
   );
+
+  const payments = paymentsData?.payments ?? [];
 
   const kpis: DashboardKPIs = useMemo(() => {
     if (!invoices || invoices.length === 0) {
@@ -29,39 +33,43 @@ export const useDashboardKPIs = (workspaceId: string) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Calculate Cash In (Expected) - Receivables: Invoices not yet matched to payments
+    // Calculate Cash In (Expected) - Receivables: Invoices not yet fully paid
     // These are invoices we've issued to customers and expect to receive payment for
     // Use invoice_type if available, otherwise fall back to status-based logic
+    // Include partially paid invoices and use remaining amount
     const cashInExpected = invoices
       .filter((inv) => {
         // Check if invoice_type exists, otherwise use status-based fallback
         const isReceivable =
           inv.invoice_type === "receivable" ||
           (!inv.invoice_type && inv.status === "draft");
-        return (
-          isReceivable &&
-          !inv.matches?.some((m) => m.payment) &&
-          inv.status !== "paid"
-        );
+        // Include unpaid and partially paid invoices
+        return isReceivable && inv.status !== "paid";
       })
-      .reduce((sum, inv) => sum + (inv.total || 0), 0);
+      .reduce((sum, inv) => {
+        // Use remaining amount (total - paid) instead of full total
+        const { remaining } = calculateInvoicePaymentAmounts(inv);
+        return sum + remaining;
+      }, 0);
 
-    // Calculate Cash Out (Expected) - Payables: Invoices not yet paid
+    // Calculate Cash Out (Expected) - Payables: Invoices not yet fully paid
     // These are invoices from vendors that we need to pay
     // Use invoice_type if available, otherwise fall back to status-based logic
+    // Include partially paid invoices and use remaining amount
     const cashOutExpected = invoices
       .filter((inv) => {
         // Check if invoice_type exists, otherwise use status-based fallback
         const isPayable =
           inv.invoice_type === "payable" ||
           (!inv.invoice_type && inv.status === "approved");
-        return (
-          isPayable &&
-          !inv.matches?.some((m) => m.payment) &&
-          inv.status !== "paid"
-        );
+        // Include unpaid and partially paid invoices
+        return isPayable && inv.status !== "paid";
       })
-      .reduce((sum, inv) => sum + (inv.total || 0), 0);
+      .reduce((sum, inv) => {
+        // Use remaining amount (total - paid) instead of full total
+        const { remaining } = calculateInvoicePaymentAmounts(inv);
+        return sum + remaining;
+      }, 0);
 
     // Calculate Amount Received - Payments matched to receivable invoices
     // This represents money received from customers for receivables
@@ -111,10 +119,11 @@ export const useDashboardKPIs = (workspaceId: string) => {
     });
 
     const overdueCount = overdueInvoices.length;
-    const overdueAmount = overdueInvoices.reduce(
-      (sum, inv) => sum + (inv.total || 0),
-      0
-    );
+    const overdueAmount = overdueInvoices.reduce((sum, inv) => {
+      // Use remaining amount for overdue calculation
+      const { remaining } = calculateInvoicePaymentAmounts(inv);
+      return sum + remaining;
+    }, 0);
 
     // Calculate Average Days to Collect
     const paidInvoices = invoices.filter((inv) => inv.status === "paid");
@@ -151,7 +160,8 @@ export const useDashboardKPIs = (workspaceId: string) => {
 };
 
 export const useARAging = (workspaceId: string) => {
-  const { data: invoices, isLoading } = useInvoices(workspaceId, {});
+  const { data: invoicesData, isLoading } = useInvoices(workspaceId, {});
+  const invoices = invoicesData?.invoices ?? [];
 
   const arAging: ARAgingBucket[] = useMemo(() => {
     if (!invoices || invoices.length === 0) {
@@ -175,15 +185,10 @@ export const useARAging = (workspaceId: string) => {
       // Only include unpaid or partially paid receivables
       const isUnpaid = inv.status !== "paid";
 
-      // Calculate outstanding amount (total - matched payments)
-      const matchedAmount =
-        inv.matches?.reduce(
-          (sum, match) => sum + (match.payment?.amount || 0),
-          0
-        ) || 0;
-      const outstandingAmount = inv.total - matchedAmount;
+      // Calculate outstanding amount using helper function
+      const { remaining } = calculateInvoicePaymentAmounts(inv);
 
-      return isReceivable && isUnpaid && outstandingAmount > 0;
+      return isReceivable && isUnpaid && remaining > 0;
     });
 
     // Initialize buckets
@@ -204,13 +209,9 @@ export const useARAging = (workspaceId: string) => {
         (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      // Calculate outstanding amount
-      const matchedAmount =
-        inv.matches?.reduce(
-          (sum, match) => sum + (match.payment?.amount || 0),
-          0
-        ) || 0;
-      const outstandingAmount = inv.total - matchedAmount;
+      // Calculate outstanding amount using helper function
+      const { remaining } = calculateInvoicePaymentAmounts(inv);
+      const outstandingAmount = remaining;
 
       // Categorize into buckets based on days past due
       let bucket: "0-30" | "31-60" | "61-90" | "90+";

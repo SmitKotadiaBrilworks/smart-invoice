@@ -13,6 +13,8 @@ export const usePayments = (
     status?: PaymentStatus;
     date_from?: string;
     date_to?: string;
+    page?: number;
+    pageSize?: number;
   }
 ) => {
   return useQuery({
@@ -23,9 +25,15 @@ export const usePayments = (
       if (filters?.status) params.append("status", filters.status);
       if (filters?.date_from) params.append("date_from", filters.date_from);
       if (filters?.date_to) params.append("date_to", filters.date_to);
+      if (filters?.page) params.append("page", filters.page.toString());
+      if (filters?.pageSize)
+        params.append("pageSize", filters.pageSize.toString());
 
       const { data } = await apiClient.get(`/payments?${params.toString()}`);
-      return data.payments as Payment[];
+      return {
+        payments: data.payments as Payment[],
+        count: data.count as number,
+      };
     },
     enabled: !!workspaceId,
   });

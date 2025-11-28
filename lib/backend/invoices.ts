@@ -12,8 +12,15 @@ export const invoiceBackend = {
       date_from?: string;
       date_to?: string;
       invoice_type?: "receivable" | "payable";
+      page?: number;
+      pageSize?: number;
     }
   ) => {
+    const page = filters?.page || 1;
+    const pageSize = filters?.pageSize || 10;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+
     let query = supabaseAdmin
       .from("invoices")
       .select(
@@ -25,10 +32,12 @@ export const invoiceBackend = {
           *,
           payment:payments(*)
         )
-      `
+      `,
+        { count: "exact" }
       )
       .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(start, end);
 
     if (filters?.status) {
       query = query.eq("status", filters.status);
@@ -46,10 +55,10 @@ export const invoiceBackend = {
       query = query.lte("due_date", filters.date_to);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) throw error;
-    return data as Invoice[];
+    return { invoices: data as Invoice[], count: count || 0 };
   },
 
   // Get single invoice

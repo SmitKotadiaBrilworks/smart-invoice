@@ -49,7 +49,8 @@ export default function UploadInvoiceModal({
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  const { data: vendors } = useVendors(workspaceId);
+  const { data: vendorsData } = useVendors(workspaceId);
+  const vendors = vendorsData?.vendors ?? [];
   const createInvoice = useCreateInvoice();
 
   // Process the uploaded file

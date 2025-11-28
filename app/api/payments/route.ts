@@ -36,10 +36,15 @@ export async function GET(request: NextRequest) {
       status: (searchParams.get("status") as PaymentStatus) || undefined,
       date_from: searchParams.get("date_from") || undefined,
       date_to: searchParams.get("date_to") || undefined,
+      page: parseInt(searchParams.get("page") || "1"),
+      pageSize: parseInt(searchParams.get("pageSize") || "10"),
     };
 
-    const payments = await paymentBackend.getPayments(workspaceId, filters);
-    return NextResponse.json({ payments });
+    const { payments, count } = await paymentBackend.getPayments(
+      workspaceId,
+      filters
+    );
+    return NextResponse.json({ payments, count });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
