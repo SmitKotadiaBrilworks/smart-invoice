@@ -7,6 +7,17 @@ export async function POST(request: NextRequest) {
     const { email, password, name } = await request.json();
 
     const supabase = createServerClient();
+    const { data: user, error: userError } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("email", email);
+    console.log("existinguser", user, userError);
+    if (user && user.length > 0) {
+      return NextResponse.json(
+        { error: "User already exists" },
+        { status: 400 }
+      );
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,

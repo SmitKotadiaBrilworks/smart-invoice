@@ -1,10 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useInvoices } from "./useInvoices";
 import { usePayments } from "./usePayments";
 import type { DashboardKPIs, ARAgingBucket } from "@/types";
 import { calculateInvoicePaymentAmounts } from "@/lib/utils/invoice-payments";
+import { convertAmoutToLocalCurrency } from "@/lib/utils/currency-conversion";
 
-export const useDashboardKPIs = (workspaceId: string) => {
+export const useDashboardKPIs = (
+  workspaceId: string,
+  targetCurrency: string = "USD"
+) => {
   const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(
     workspaceId,
     {}
@@ -17,231 +21,282 @@ export const useDashboardKPIs = (workspaceId: string) => {
 
   const payments = paymentsData?.payments ?? [];
 
-  const kpis: DashboardKPIs = useMemo(() => {
-    if (!invoices || invoices.length === 0) {
-      return {
-        cash_in_expected: 0,
-        cash_out_expected: 0,
-        amount_received: 0,
-        amount_paid: 0,
-        overdue_count: 0,
-        overdue_amount: 0,
-        avg_days_to_collect: 0,
+  const [kpis, setKpis] = useState<DashboardKPIs | null>(null);
+  const [isCalculating, setIsCalculating] = useState(true);
+
+  useEffect(() => {
+    const calculateKPIs = async () => {
+      setIsCalculating(true);
+      if (!invoices || invoices.length === 0) {
+        setKpis({
+          cash_in_expected: 0,
+          cash_out_expected: 0,
+          amount_received: 0,
+          amount_paid: 0,
+          overdue_count: 0,
+          overdue_amount: 0,
+          avg_days_to_collect: 0,
+        });
+        setIsCalculating(false);
+        return;
+      }
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // Helper to batch convert amounts
+      const convertAndSum = async (
+        items: any[],
+        getAmount: (item: any) => number,
+        getCurrency: (item: any) => string
+      ) => {
+        // Group amounts by currency
+        const amountsByCurrency: Record<string, number> = {};
+        items.forEach((item) => {
+          const currency = getCurrency(item) || "USD";
+          const amount = getAmount(item);
+          amountsByCurrency[currency] =
+            (amountsByCurrency[currency] || 0) + amount;
+        });
+
+        // Convert each currency total
+        let total = 0;
+        for (const [currency, amount] of Object.entries(amountsByCurrency)) {
+          const converted = await convertAmoutToLocalCurrency(
+            amount,
+            targetCurrency,
+            currency
+          );
+          total += converted;
+        }
+        return total;
       };
-    }
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    // Calculate Cash In (Expected) - Receivables: Invoices not yet fully paid
-    // These are invoices we've issued to customers and expect to receive payment for
-    // Use invoice_type if available, otherwise fall back to status-based logic
-    // Include partially paid invoices and use remaining amount
-    const cashInExpected = invoices
-      .filter((inv) => {
-        // Check if invoice_type exists, otherwise use status-based fallback
+      // Calculate Cash In (Expected)
+      const cashInInvoices = invoices.filter((inv) => {
         const isReceivable =
           inv.invoice_type === "receivable" ||
           (!inv.invoice_type && inv.status === "draft");
-        // Include unpaid and partially paid invoices
         return isReceivable && inv.status !== "paid";
-      })
-      .reduce((sum, inv) => {
-        // Use remaining amount (total - paid) instead of full total
-        const { remaining } = calculateInvoicePaymentAmounts(inv);
-        return sum + remaining;
-      }, 0);
+      });
+      const cashInExpected = await convertAndSum(
+        cashInInvoices,
+        (inv) => calculateInvoicePaymentAmounts(inv).remaining,
+        (inv) => inv.currency
+      );
 
-    // Calculate Cash Out (Expected) - Payables: Invoices not yet fully paid
-    // These are invoices from vendors that we need to pay
-    // Use invoice_type if available, otherwise fall back to status-based logic
-    // Include partially paid invoices and use remaining amount
-    const cashOutExpected = invoices
-      .filter((inv) => {
-        // Check if invoice_type exists, otherwise use status-based fallback
+      // Calculate Cash Out (Expected)
+      const cashOutInvoices = invoices.filter((inv) => {
         const isPayable =
           inv.invoice_type === "payable" ||
           (!inv.invoice_type && inv.status === "approved");
-        // Include unpaid and partially paid invoices
         return isPayable && inv.status !== "paid";
-      })
-      .reduce((sum, inv) => {
-        // Use remaining amount (total - paid) instead of full total
-        const { remaining } = calculateInvoicePaymentAmounts(inv);
-        return sum + remaining;
-      }, 0);
+      });
+      const cashOutExpected = await convertAndSum(
+        cashOutInvoices,
+        (inv) => calculateInvoicePaymentAmounts(inv).remaining,
+        (inv) => inv.currency
+      );
 
-    // Calculate Amount Received - Payments matched to receivable invoices
-    // This represents money received from customers for receivables
-    // Use invoice_type if available, otherwise fall back to status-based logic
-    const amountReceived =
-      payments
-        ?.filter((payment) => {
+      // Calculate Amount Received
+      const receivedPayments =
+        payments?.filter((payment) => {
           if (!payment.matches || payment.matches.length === 0) return false;
-          // Check if any matched invoice is a receivable
           return payment.matches.some((match) => {
             const invoice = match.invoice;
             if (!invoice) return false;
-            // Use invoice_type if available, otherwise check status
             return (
               invoice.invoice_type === "receivable" ||
               (!invoice.invoice_type && invoice.status === "draft")
             );
           });
-        })
-        .reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+        }) || [];
+      const amountReceived = await convertAndSum(
+        receivedPayments,
+        (payment) => payment.amount || 0,
+        (payment) => payment.currency
+      );
 
-    // Calculate Amount Paid - Payments matched to payable invoices
-    // This represents money paid to vendors for payables
-    // Use invoice_type if available, otherwise fall back to status-based logic
-    const amountPaid =
-      payments
-        ?.filter((payment) => {
+      // Calculate Amount Paid
+      const paidPayments =
+        payments?.filter((payment) => {
           if (!payment.matches || payment.matches.length === 0) return false;
-          // Check if any matched invoice is a payable
           return payment.matches.some((match) => {
             const invoice = match.invoice;
             if (!invoice) return false;
-            // Use invoice_type if available, otherwise check status
             return (
               invoice.invoice_type === "payable" ||
               (!invoice.invoice_type && invoice.status === "approved")
             );
           });
-        })
-        .reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+        }) || [];
+      const amountPaid = await convertAndSum(
+        paidPayments,
+        (payment) => payment.amount || 0,
+        (payment) => payment.currency
+      );
 
-    // Calculate Overdue Invoices
-    const overdueInvoices = invoices.filter((inv) => {
-      if (inv.status === "paid") return false;
-      const dueDate = new Date(inv.due_date);
-      return dueDate < today;
-    });
+      // Calculate Overdue Invoices
+      const overdueInvoices = invoices.filter((inv) => {
+        if (inv.status === "paid") return false;
+        const dueDate = new Date(inv.due_date);
+        return dueDate < today;
+      });
+      const overdueCount = overdueInvoices.length;
+      const overdueAmount = await convertAndSum(
+        overdueInvoices,
+        (inv) => calculateInvoicePaymentAmounts(inv).remaining,
+        (inv) => inv.currency
+      );
 
-    const overdueCount = overdueInvoices.length;
-    const overdueAmount = overdueInvoices.reduce((sum, inv) => {
-      // Use remaining amount for overdue calculation
-      const { remaining } = calculateInvoicePaymentAmounts(inv);
-      return sum + remaining;
-    }, 0);
+      // Calculate Average Days to Collect
+      const paidInvoices = invoices.filter((inv) => inv.status === "paid");
+      let avgDays = 0;
+      if (paidInvoices.length > 0) {
+        const totalDays = paidInvoices.reduce((sum, inv) => {
+          const issueDate = new Date(inv.issue_date);
+          const paidDate = inv.matches?.[0]?.payment?.received_at
+            ? new Date(inv.matches[0].payment.received_at)
+            : new Date(inv.updated_at);
+          const days = Math.floor(
+            (paidDate.getTime() - issueDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          return sum + Math.max(0, days);
+        }, 0);
+        avgDays = Math.round(totalDays / paidInvoices.length);
+      }
 
-    // Calculate Average Days to Collect
-    const paidInvoices = invoices.filter((inv) => inv.status === "paid");
-    let avgDays = 0;
-    if (paidInvoices.length > 0) {
-      const totalDays = paidInvoices.reduce((sum, inv) => {
-        const issueDate = new Date(inv.issue_date);
-        const paidDate = inv.matches?.[0]?.payment?.received_at
-          ? new Date(inv.matches[0].payment.received_at)
-          : new Date(inv.updated_at);
-        const days = Math.floor(
-          (paidDate.getTime() - issueDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        return sum + Math.max(0, days);
-      }, 0);
-      avgDays = Math.round(totalDays / paidInvoices.length);
-    }
-
-    return {
-      cash_in_expected: cashInExpected,
-      cash_out_expected: cashOutExpected,
-      amount_received: amountReceived,
-      amount_paid: amountPaid,
-      overdue_count: overdueCount,
-      overdue_amount: overdueAmount,
-      avg_days_to_collect: avgDays,
+      setKpis({
+        cash_in_expected: cashInExpected,
+        cash_out_expected: cashOutExpected,
+        amount_received: amountReceived,
+        amount_paid: amountPaid,
+        overdue_count: overdueCount,
+        overdue_amount: overdueAmount,
+        avg_days_to_collect: avgDays,
+      });
+      setIsCalculating(false);
     };
-  }, [invoices, payments]);
+
+    if (!invoicesLoading && !paymentsLoading) {
+      calculateKPIs();
+    }
+  }, [invoices, payments, targetCurrency, invoicesLoading, paymentsLoading]);
 
   return {
     data: kpis,
-    isLoading: invoicesLoading || paymentsLoading,
+    isLoading: invoicesLoading || paymentsLoading || isCalculating,
   };
 };
 
-export const useARAging = (workspaceId: string) => {
+export const useARAging = (
+  workspaceId: string,
+  targetCurrency: string = "USD"
+) => {
   const { data: invoicesData, isLoading } = useInvoices(workspaceId, {});
   const invoices = invoicesData?.invoices ?? [];
 
-  const arAging: ARAgingBucket[] = useMemo(() => {
-    if (!invoices || invoices.length === 0) {
-      return [
-        { bucket: "0-30", count: 0, amount: 0 },
-        { bucket: "31-60", count: 0, amount: 0 },
-        { bucket: "61-90", count: 0, amount: 0 },
-        { bucket: "90+", count: 0, amount: 0 },
-      ];
-    }
+  const [arAging, setArAging] = useState<ARAgingBucket[]>([]);
+  const [isCalculating, setIsCalculating] = useState(true);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Filter for receivable invoices that are not fully paid
-    const receivableInvoices = invoices.filter((inv) => {
-      const isReceivable =
-        inv.invoice_type === "receivable" ||
-        (!inv.invoice_type && inv.status === "draft");
-
-      // Only include unpaid or partially paid receivables
-      const isUnpaid = inv.status !== "paid";
-
-      // Calculate outstanding amount using helper function
-      const { remaining } = calculateInvoicePaymentAmounts(inv);
-
-      return isReceivable && isUnpaid && remaining > 0;
-    });
-
-    // Initialize buckets
-    const buckets: { [key: string]: { count: number; amount: number } } = {
-      "0-30": { count: 0, amount: 0 },
-      "31-60": { count: 0, amount: 0 },
-      "61-90": { count: 0, amount: 0 },
-      "90+": { count: 0, amount: 0 },
-    };
-
-    // Calculate days outstanding for each invoice
-    receivableInvoices.forEach((inv) => {
-      const dueDate = new Date(inv.due_date);
-      dueDate.setHours(0, 0, 0, 0);
-
-      // Calculate days past due (negative if not yet due)
-      const daysPastDue = Math.floor(
-        (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      // Calculate outstanding amount using helper function
-      const { remaining } = calculateInvoicePaymentAmounts(inv);
-      const outstandingAmount = remaining;
-
-      // Categorize into buckets based on days past due
-      let bucket: "0-30" | "31-60" | "61-90" | "90+";
-      if (daysPastDue <= 0) {
-        // Not yet due - count as 0-30
-        bucket = "0-30";
-      } else if (daysPastDue <= 30) {
-        bucket = "0-30";
-      } else if (daysPastDue <= 60) {
-        bucket = "31-60";
-      } else if (daysPastDue <= 90) {
-        bucket = "61-90";
-      } else {
-        bucket = "90+";
+  useEffect(() => {
+    const calculateAging = async () => {
+      setIsCalculating(true);
+      if (!invoices || invoices.length === 0) {
+        setArAging([
+          { bucket: "0-30", count: 0, amount: 0 },
+          { bucket: "31-60", count: 0, amount: 0 },
+          { bucket: "61-90", count: 0, amount: 0 },
+          { bucket: "90+", count: 0, amount: 0 },
+        ]);
+        setIsCalculating(false);
+        return;
       }
 
-      buckets[bucket].count += 1;
-      buckets[bucket].amount += outstandingAmount;
-    });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    return [
-      { bucket: "0-30", ...buckets["0-30"] },
-      { bucket: "31-60", ...buckets["31-60"] },
-      { bucket: "61-90", ...buckets["61-90"] },
-      { bucket: "90+", ...buckets["90+"] },
-    ];
-  }, [invoices]);
+      const buckets: { [key: string]: { count: number; amount: number } } = {
+        "0-30": { count: 0, amount: 0 },
+        "31-60": { count: 0, amount: 0 },
+        "61-90": { count: 0, amount: 0 },
+        "90+": { count: 0, amount: 0 },
+      };
+
+      // Filter for receivable invoices that are not fully paid
+      const receivableInvoices = invoices.filter((inv) => {
+        const isReceivable =
+          inv.invoice_type === "receivable" ||
+          (!inv.invoice_type && inv.status === "draft");
+
+        // Only include unpaid or partially paid receivables
+        const isUnpaid = inv.status !== "paid";
+
+        // Calculate outstanding amount using helper function
+        const { remaining } = calculateInvoicePaymentAmounts(inv);
+
+        return isReceivable && isUnpaid && remaining > 0;
+      });
+
+      // Calculate days outstanding and convert amounts
+      const promises = receivableInvoices.map(async (inv) => {
+        const dueDate = new Date(inv.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+
+        // Calculate days past due (negative if not yet due)
+        const daysPastDue = Math.floor(
+          (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        // Calculate outstanding amount using helper function
+        const { remaining } = calculateInvoicePaymentAmounts(inv);
+        const convertedAmount = await convertAmoutToLocalCurrency(
+          remaining,
+          targetCurrency,
+          inv.currency
+        );
+
+        return { daysPastDue, convertedAmount };
+      });
+
+      const results = await Promise.all(promises);
+
+      results.forEach(({ daysPastDue, convertedAmount }) => {
+        // Categorize into buckets based on days past due
+        let bucket: "0-30" | "31-60" | "61-90" | "90+";
+        if (daysPastDue <= 0) {
+          // Not yet due - count as 0-30
+          bucket = "0-30";
+        } else if (daysPastDue <= 30) {
+          bucket = "0-30";
+        } else if (daysPastDue <= 60) {
+          bucket = "31-60";
+        } else if (daysPastDue <= 90) {
+          bucket = "61-90";
+        } else {
+          bucket = "90+";
+        }
+
+        buckets[bucket].count += 1;
+        buckets[bucket].amount += convertedAmount;
+      });
+
+      setArAging([
+        { bucket: "0-30", ...buckets["0-30"] },
+        { bucket: "31-60", ...buckets["31-60"] },
+        { bucket: "61-90", ...buckets["61-90"] },
+        { bucket: "90+", ...buckets["90+"] },
+      ]);
+      setIsCalculating(false);
+    };
+
+    if (!isLoading) {
+      calculateAging();
+    }
+  }, [invoices, targetCurrency, isLoading]);
 
   return {
     data: arAging,
-    isLoading,
+    isLoading: isLoading || isCalculating,
   };
 };

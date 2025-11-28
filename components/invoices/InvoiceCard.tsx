@@ -195,11 +195,13 @@ export default function InvoiceCard({
               {formatCurrency(invoice.total, invoice.currency || "USD")}
             </div>
             {(() => {
-              const { paid, remaining } = calculateInvoicePaymentAmounts(invoice);
+              const { paid, remaining } =
+                calculateInvoicePaymentAmounts(invoice);
               if (paid > 0) {
                 return (
                   <div className="text-xs text-text-tertiary mt-1">
-                    Paid: {formatCurrency(paid, invoice.currency || "USD")} | Remaining:{" "}
+                    Paid: {formatCurrency(paid, invoice.currency || "USD")} |
+                    Remaining:{" "}
                     {formatCurrency(remaining, invoice.currency || "USD")}
                   </div>
                 );
