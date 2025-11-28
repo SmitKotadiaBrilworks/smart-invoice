@@ -8,6 +8,7 @@ import {
   UserAddOutlined,
   FileTextOutlined,
 } from "@ant-design/icons";
+import Image from "next/image";
 
 const { Title, Paragraph } = Typography;
 
@@ -30,9 +31,12 @@ export default function Home() {
         <Card className="card-shadow border-0">
           <div className="text-center mb-8">
             <div className="mb-6">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary mb-4">
-                <FileTextOutlined className="text-white text-3xl" />
-              </div>
+              <Image
+                src="/invoice-logo.svg"
+                alt="Logo"
+                width={100}
+                height={100}
+              />
             </div>
             <Title
               level={1}
