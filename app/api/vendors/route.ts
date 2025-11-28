@@ -30,8 +30,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const vendors = await vendorBackend.getVendors(workspaceId);
-    return NextResponse.json({ vendors });
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+
+    const { vendors, count } = await vendorBackend.getVendors(workspaceId, {
+      page,
+      pageSize,
+    });
+    return NextResponse.json({ vendors, count });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

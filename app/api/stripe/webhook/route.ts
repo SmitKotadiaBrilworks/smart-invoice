@@ -239,7 +239,7 @@ async function handlePaymentIntentSucceeded(
     source: "stripe",
   });
 
-  const existingPayment = existingPayments.find(
+  const existingPayment = existingPayments?.payments?.find(
     (p) => p.external_id === paymentIntent.id
   );
 
@@ -329,7 +329,7 @@ async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
     source: "stripe",
   });
 
-  const existingPayment = existingPayments.find(
+  const existingPayment = existingPayments?.payments?.find(
     (p) => p.external_id === paymentIntent.id
   );
 
@@ -428,7 +428,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     source: "stripe",
   });
 
-  const existingPayment = existingPayments.find(
+  const existingPayment = existingPayments?.payments?.find(
     (p) => p.external_id === paymentIntentId
   );
 

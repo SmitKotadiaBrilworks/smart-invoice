@@ -8,6 +8,8 @@ import { useVendors } from "@/hooks/useVendors";
 import { useCreateInvoice } from "@/hooks/useInvoices";
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/constants/currencies";
 import LoadingPage from "@/components/common/LoadingPage";
+import { DataTable } from "@/components/ui/DataTable";
+import { ColumnDef } from "@tanstack/react-table";
 
 import {
   Card,
@@ -19,10 +21,7 @@ import {
   Row,
   Col,
   Select,
-  Space,
   Divider,
-  Table,
-  Spin,
 } from "antd";
 import { message } from "@/lib/toast";
 import {
@@ -42,7 +41,10 @@ export default function ManualInvoicePage() {
   const [form] = Form.useForm();
   const [lineItems, setLineItems] = useState<InvoiceLineExtraction[]>([]);
 
-  const { data: vendors } = useVendors(selectedWorkspace?.id || "");
+  const { data: vendorsData } = useVendors(selectedWorkspace?.id || "", {
+    pageSize: 1000,
+  });
+  const vendors = vendorsData?.vendors;
   const createInvoice = useCreateInvoice();
 
   // No need for redirect - middleware handles it
@@ -189,25 +191,27 @@ export default function ManualInvoicePage() {
     return null;
   }
 
-  const lineItemsColumns = [
+  const getLineItemsColumns = (): ColumnDef<InvoiceLineExtraction>[] => [
     {
-      title: "Description",
-      key: "description",
-      render: (_: any, record: InvoiceLineExtraction, index: number) => (
+      accessorKey: "description",
+      header: "Description",
+      cell: ({ row }) => (
         <Input
-          value={record.description}
-          onChange={(e) => updateLineItem(index, "description", e.target.value)}
+          value={row.original.description}
+          onChange={(e) =>
+            updateLineItem(row.index, "description", e.target.value)
+          }
           placeholder="Item description"
         />
       ),
     },
     {
-      title: "Qty",
-      key: "qty",
-      render: (_: any, record: InvoiceLineExtraction, index: number) => (
+      accessorKey: "qty",
+      header: "Qty",
+      cell: ({ row }) => (
         <InputNumber
-          value={record.qty}
-          onChange={(value) => updateLineItem(index, "qty", value || 0)}
+          value={row.original.qty}
+          onChange={(value) => updateLineItem(row.index, "qty", value || 0)}
           min={0}
           precision={2}
           style={{ width: "100%" }}
@@ -215,18 +219,18 @@ export default function ManualInvoicePage() {
       ),
     },
     {
-      title: "Unit Price",
-      key: "unit_price",
-      render: (_: any, record: InvoiceLineExtraction, index: number) => {
+      accessorKey: "unit_price",
+      header: "Unit Price",
+      cell: ({ row }) => {
         const currency =
           form.getFieldValue("currency") ||
           selectedWorkspace?.currency ||
           "USD";
         return (
           <InputNumber
-            value={record.unit_price}
+            value={row.original.unit_price}
             onChange={(value) =>
-              updateLineItem(index, "unit_price", value || 0)
+              updateLineItem(row.index, "unit_price", value || 0)
             }
             min={0}
             precision={2}
@@ -241,12 +245,14 @@ export default function ManualInvoicePage() {
       },
     },
     {
-      title: "Tax %",
-      key: "tax_percent",
-      render: (_: any, record: InvoiceLineExtraction, index: number) => (
+      accessorKey: "tax_percent",
+      header: "Tax %",
+      cell: ({ row }) => (
         <InputNumber
-          value={record.tax_percent}
-          onChange={(value) => updateLineItem(index, "tax_percent", value || 0)}
+          value={row.original.tax_percent}
+          onChange={(value) =>
+            updateLineItem(row.index, "tax_percent", value || 0)
+          }
           min={0}
           max={100}
           precision={2}
@@ -255,29 +261,29 @@ export default function ManualInvoicePage() {
       ),
     },
     {
-      title: "Total",
-      key: "line_total",
-      render: (_: any, record: InvoiceLineExtraction) => {
+      accessorKey: "line_total",
+      header: "Total",
+      cell: ({ row }) => {
         const currency =
           form.getFieldValue("currency") ||
           selectedWorkspace?.currency ||
           "USD";
         return (
           <span className="font-semibold">
-            {formatCurrency(record.line_total, currency)}
+            {formatCurrency(row.original.line_total, currency)}
           </span>
         );
       },
     },
     {
-      title: "Action",
-      key: "action",
-      render: (_: any, __: InvoiceLineExtraction, index: number) => (
+      id: "action",
+      header: "Action",
+      cell: ({ row }) => (
         <Button
           type="link"
           danger
           icon={<DeleteOutlined />}
-          onClick={() => removeLineItem(index)}
+          onClick={() => removeLineItem(row.index)}
         >
           Remove
         </Button>
@@ -428,16 +434,10 @@ export default function ManualInvoicePage() {
                   </Button>
                 </div>
               ) : (
-                <Table
-                  columns={lineItemsColumns}
-                  dataSource={lineItems}
-                  rowKey={(_, index) => index?.toString() || ""}
-                  pagination={{
-                    pageSize: 5,
-                    showSizeChanger: false,
-                    showTotal: (total) => `Total ${total} invoices`,
-                  }}
-                  size="small"
+                <DataTable
+                  columns={getLineItemsColumns()}
+                  data={lineItems}
+                  pagination={false}
                 />
               )}
             </div>
